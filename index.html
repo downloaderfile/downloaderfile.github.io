@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Downloading file…</title>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
+
 <style>
   :root{
     --bg:#006060;
@@ -99,7 +101,9 @@
   .theme-js   { color:#5a5a00; background:linear-gradient(180deg,#fff,#fffacc); }
   .theme-css  { color:#004466; background:linear-gradient(180deg,#fff,#e6f7ff); }
   .theme-txt  { color:#333333; background:linear-gradient(180deg,#fff,#f3f3f3); }
-  .theme-png  { color:#4b0082; background:linear-gradient(180deg,#fff,#f3e5f5); } /* New PNG theme */
+  .theme-png  { color:#4b0082; background:linear-gradient(180deg,#fff,#f3e5f5); }
+  .theme-docx { color:#2b579a; background:linear-gradient(180deg,#fff,#e6f0fa); }
+  .theme-wav  { color:#d32f2f; background:linear-gradient(180deg,#fff,#ffebee); }
 
   @media (prefers-reduced-motion: reduce) { .progress { transition: none !important; } }
 </style>
@@ -120,7 +124,7 @@
 
     <div class="content" id="windowContent">
       <div class="line">
-        <div class="icon-box theme-json" id="iconBox" aria-hidden="true">FILE</div>
+        <div class="icon-box theme-docx" id="iconBox" aria-hidden="true">DOCX</div>
         <div style="flex:1;">
           <div class="title-main" id="titleMain">Menyiapkan unduhan</div>
           <div class="sub" id="subMain">Proses otomatis berjalan — biarkan halaman ini terbuka.</div>
@@ -146,12 +150,14 @@
       <div class="sd-body">
         <div class="sd-row">
           <label for="fname">Nama file</label>
-          <input id="fname" type="text" value="image" aria-label="Nama file" />
+          <input id="fname" type="text" value="file" aria-label="Nama file" />
         </div>
         <div class="sd-row">
           <label for="fext">Ekstensi</label>
           <select id="fext" aria-label="Pilih ekstensi">
+            <option value="docx">.docx</option>
             <option value="png">.png</option>
+            <option value="wav">.wav</option>
             <option value="json">.json</option>
             <option value="html">.html</option>
             <option value="js">.js</option>
@@ -229,12 +235,59 @@
     return cleaned || 'download';
   }
 
+  function triggerDownload(blob, fullName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fullName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => { URL.revokeObjectURL(url); }, 1500);
+  }
+
   function downloadFromText(text, filename, ext){
     try {
       const fullName = filename + (ext ? '.' + ext : '');
+
+      // --- GENERATE FILE WORD ASLI (DOCX) ---
+      if (ext === 'docx') {
+        if (typeof docx === 'undefined') {
+          // Fallback jika tidak ada koneksi internet / library gagal diload
+          alert('Gagal memuat pembuat file Word asli. Pastikan terhubung ke internet.');
+          triggerDownload(new Blob([text], { type: 'text/plain' }), fullName);
+          return;
+        }
+
+        const paragraphs = text.split('\n').map(line => {
+            return new docx.Paragraph({
+                children: [ new docx.TextRun(line) ]
+            });
+        });
+
+        const doc = new docx.Document({
+            creator: "Writer Ultimate",
+            title: filename,
+            sections: [{
+                properties: {},
+                children: paragraphs
+            }]
+        });
+
+        docx.Packer.toBlob(doc).then(blob => {
+            triggerDownload(blob, fullName);
+            finishSuccessfully();
+        }).catch(e => {
+            console.error('DOCX creation error', e);
+            updateProgress(progress, 'Gagal membuat file DOCX.');
+        });
+        return; 
+      }
+
+      // --- GENERATE FILE LAINNYA ---
       let blob;
-      // Handle Base64 Image for PNG
-      if (ext === 'png' && text.startsWith('data:image/')) {
+      if (text.startsWith('data:')) {
+        // Base64 Handler (PNG, WAV, dll)
         const parts = text.split(',');
         const byteString = atob(parts[1]);
         const mimeString = parts[0].split(':')[1].split(';')[0];
@@ -245,18 +298,14 @@
         }
         blob = new Blob([ab], { type: mimeString });
       } else {
+        // Text/Code Handler
         const mime = ext === 'json' ? 'application/json' : 'text/plain';
         blob = new Blob([text], { type: mime });
       }
       
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fullName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => { URL.revokeObjectURL(url); }, 1500);
+      triggerDownload(blob, fullName);
+      finishSuccessfully();
+
     } catch(e){
       console.error('download error', e);
       updateProgress(progress, 'Kesalahan saat mengunduh. Periksa konsol.');
@@ -270,9 +319,11 @@
       js:   { label: 'JS',   title: `Membuat file ${filename || 'file'}.js`, class:'theme-js' },
       css:  { label: 'CSS',  title: `Membuat file ${filename || 'file'}.css`, class:'theme-css' },
       txt:  { label: 'TXT',  title: `Membuat file ${filename || 'file'}.txt`, class:'theme-txt' },
-      png:  { label: 'PNG',  title: `Membuat file ${filename || 'image'}.png`, class:'theme-png' } // PNG info
+      png:  { label: 'PNG',  title: `Membuat file ${filename || 'image'}.png`, class:'theme-png' },
+      wav:  { label: 'WAV',  title: `Membuat file ${filename || 'audio'}.wav`, class:'theme-wav' },
+      docx: { label: 'DOCX', title: `Membuat file ${filename || 'file'}.docx`, class:'theme-docx' }
     };
-    const info = map[ext] || { label: 'FILE', title: `Membuat file ${filename || 'file'}`, class:'theme-txt' };
+    const info = map[ext] || { label: 'FILE', title: `Membuat file ${filename || 'file'}`, class:'theme-docx' };
     iconBox.className = 'icon-box ' + info.class;
     iconBox.textContent = info.label;
     titleMain.textContent = info.title;
@@ -281,21 +332,22 @@
   }
 
   function guessExtensionFromText(text){
-    if (!text || !text.trim()) return 'txt';
+    if (!text || !text.trim()) return 'docx'; // docx jadi default
     const t = text.trim();
-    if (t.startsWith('data:image/png')) return 'png'; // PNG detection
+    if (t.startsWith('data:image/png')) return 'png';
+    if (t.startsWith('data:audio/wav') || t.startsWith('data:audio/x-wav')) return 'wav';
     try { JSON.parse(t); return 'json'; } catch(e){}
     if (/^\s*<!doctype html|<html[\s>]/i.test(t) || /<head|<body/i.test(t)) return 'html';
     if (/[.#]?[a-zA-Z0-9\-_]+\s*\{[^}]*\}/.test(t) && /:[\s]*[a-zA-Z-]+/.test(t)) return 'css';
     if (/\b(function|const|let|var|=>|console\.log|export|import)\b/.test(t)) return 'js';
-    return 'txt';
+    return 'docx';
   }
 
-  async function showSaveDialog(defaultName = 'file', defaultExt = 'txt') {
+  async function showSaveDialog(defaultName = 'file', defaultExt = 'docx') {
     return new Promise((resolve) => {
       sdError.textContent = '';
       fnameInput.value = defaultName;
-      fextSelect.value = defaultExt || 'txt';
+      fextSelect.value = defaultExt || 'docx';
       setThemeForExt(defaultExt, defaultName);
 
       overlay.style.display = 'flex';
@@ -319,7 +371,7 @@
           fnameInput.focus();
           return;
         }
-        const ext = (fextSelect.value || 'txt');
+        const ext = (fextSelect.value || 'docx');
         closeDialog({ name: cleaned, ext });
       }
 
@@ -347,7 +399,9 @@
 
       const guessed = guessExtensionFromText(text);
       updateProgress(45, 'Konten ditemukan. Menunggu konfirmasi…');
-      const save = await showSaveDialog(guessed === 'png' ? 'image' : 'file', guessed);
+      
+      const defaultName = guessed === 'png' ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
+      const save = await showSaveDialog(defaultName, guessed);
       if (!save) {
         stopFakeProgress();
         updateProgress(progress, 'Dibatalkan.');
@@ -356,7 +410,6 @@
       setThemeForExt(save.ext, save.name);
       updateProgress(92, 'Menulis file…');
       downloadFromText(text, save.name, save.ext);
-      finishSuccessfully();
       return true;
     } catch (err) {
       stopFakeProgress();
@@ -391,17 +444,17 @@
         const val = hidden.value || '';
         if (!val.trim()) return;
         const guessed = guessExtensionFromText(val);
-        const save = await showSaveDialog('image', guessed);
+        const defaultName = guessed === 'png' ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
+        const save = await showSaveDialog(defaultName, guessed);
         if (!save) return;
         setThemeForExt(save.ext, save.name);
         downloadFromText(val, save.name, save.ext);
-        finishSuccessfully();
       }, { once: true });
     }, { once: true });
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    setThemeForExt('png', 'image'); // Default theme on load
+    setThemeForExt('docx', 'file'); // docx jadi tampilan default waktu web diload
     const ok = await attemptClipboardFlow();
     if (!ok) enableFallback();
   });
