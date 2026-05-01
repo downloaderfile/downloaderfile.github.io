@@ -40,6 +40,7 @@ body {
     font-size: 14px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
 }
 
 .content {
@@ -59,6 +60,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1.4;
 }
 
 /* Modal Popup Save As */
@@ -66,7 +68,7 @@ body {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0, 0, 0, 0.5);
-    display: none; /* Sembunyi secara default */
+    display: none;
     justify-content: center;
     align-items: center;
     z-index: 1000;
@@ -74,6 +76,7 @@ body {
 
 .modal-window {
     width: 350px;
+    max-width: 92vw;
 }
 
 .modal-content {
@@ -102,6 +105,7 @@ input[type="text"] {
     padding: 4px;
     font-size: 12px;
     flex-grow: 1;
+    min-width: 0;
 }
 
 .button-group {
@@ -126,7 +130,6 @@ button.win-btn:active {
     background: #e0e0e0;
 }
 
-/* Teks area ini disembunyikan total, hanya sebagai fallback */
 #hiddenPasteArea {
     position: absolute;
     left: -9999px;
@@ -143,7 +146,7 @@ button.win-btn:active {
     <div class="content">
         <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px; margin: 0 auto;">
         <div class="status-box" id="statusText">
-            Siap. Tekan <b>Ctrl + V</b> di mana saja untuk memproses resep...
+            Membuka aplikasi...
         </div>
     </div>
 </div>
@@ -156,12 +159,12 @@ button.win-btn:active {
         </div>
         <div class="modal-content">
             <div style="font-size: 12px; margin-bottom: 5px;">Penyusunan file selesai. Simpan sebagai:</div>
-            
+
             <div class="input-group">
                 <label>File name:</label>
                 <input type="text" id="fileNameInput" value="My_Sequence.wav">
             </div>
-            
+
             <div class="button-group">
                 <button class="win-btn" onclick="executeDownload()">Save</button>
                 <button class="win-btn" onclick="closeModal()">Cancel</button>
@@ -180,68 +183,133 @@ const notesFreq = [
 
 const statusText = document.getElementById("statusText");
 const saveModal = document.getElementById("saveModal");
+
 let currentAudioUrl = null;
+let hasProcessedClipboard = false;
+let autoReadAttempted = false;
 
 // --- LISTENER PASTE GLOBAL ---
 // Menangkap perintah Ctrl+V atau Paste di mana saja pada halaman
 window.addEventListener("paste", (e) => {
     e.preventDefault();
     const pasteData = (e.clipboardData || window.clipboardData).getData("text");
-    processData(pasteData);
+    processClipboardText(pasteData);
 });
+
+// --- AUTO BACA CLIPBOARD SAAT APLIKASI DIBUKA ---
+window.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+        tryAutoReadClipboard();
+    }, 150);
+});
+
+// Kadang browser baru kasih akses setelah halaman aktif/fokus
+window.addEventListener("focus", () => {
+    if (!hasProcessedClipboard && !autoReadAttempted) {
+        setTimeout(() => {
+            tryAutoReadClipboard();
+        }, 200);
+    }
+});
+
+async function tryAutoReadClipboard() {
+    if (hasProcessedClipboard || autoReadAttempted) return;
+    autoReadAttempted = true;
+
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+        statusText.innerHTML = "Clipboard otomatis tidak didukung. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+        return;
+    }
+
+    try {
+        statusText.innerHTML = "Membaca clipboard otomatis...";
+        const text = await navigator.clipboard.readText();
+
+        if (typeof text === "string" && text.trim()) {
+            processClipboardText(text.trim());
+        } else {
+            statusText.innerHTML = "Clipboard kosong. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+        }
+    } catch (err) {
+        console.error("Auto clipboard read failed:", err);
+        statusText.innerHTML = "Akses clipboard ditolak browser. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+    }
+}
+
+function processClipboardText(pasteData) {
+    if (hasProcessedClipboard) return;
+    hasProcessedClipboard = true;
+    processData(pasteData);
+}
 
 // --- PROSES JSON KE AUDIO ---
 async function processData(data) {
     try {
         const recipe = JSON.parse(data);
-        
+
         // Validasi dasar struktur JSON
-        if (!recipe.bpm || !recipe.grid || !recipe.cols) {
+        if (
+            recipe === null ||
+            typeof recipe !== "object" ||
+            typeof recipe.bpm !== "number" ||
+            !Array.isArray(recipe.grid) ||
+            typeof recipe.cols !== "number"
+        ) {
             throw new Error("Format JSON tidak dikenali.");
         }
 
-        statusText.innerHTML = "Membaca resep...<br>Memasak audio secara diam-diam...";
-        
+        if (!Array.isArray(recipe.grid) || recipe.grid.length < 9) {
+            throw new Error("Grid tidak valid.");
+        }
+
+        statusText.innerHTML = "Membaca resep...<br>Mengolah audio secara diam-diam...";
+
         // Jeda sebentar agar UI sempat update sebelum CPU terkunci untuk render
         setTimeout(() => {
             renderOfflineAudio(recipe).catch(err => {
                 console.error(err);
                 statusText.innerHTML = `<span style="color:red">Gagal merender audio.</span>`;
+                hasProcessedClipboard = false;
             });
         }, 100);
 
     } catch (err) {
         statusText.innerHTML = `<span style="color:red">Error: Data di clipboard bukan resep musik yang valid.</span>`;
         console.error("Paste Error:", err);
+        hasProcessedClipboard = false;
     }
 }
 
-// --- ENGINE RENDER AUDIO (SILUMAN) ---
+// --- ENGINE RENDER AUDIO ---
 async function renderOfflineAudio(recipe) {
     const bpm = recipe.bpm;
-    const speedSeconds = (60 / bpm) / 4; 
+    const speedSeconds = (60 / bpm) / 4;
     const noteLength = recipe.noteLength;
     const cols = recipe.cols;
     const grid = recipe.grid;
 
-    const totalDuration = (cols * speedSeconds) + noteLength + 0.5; 
-    
-    // OfflineAudioContext memproses audio secepat mungkin tanpa mengeluarkannya ke speaker
-    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100 * totalDuration, 44100);
-    
+    const totalDuration = (cols * speedSeconds) + noteLength + 0.5;
+
+    const OfflineAudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineAudioCtx) {
+        throw new Error("OfflineAudioContext tidak didukung browser ini.");
+    }
+
+    const offlineCtx = new OfflineAudioCtx(1, Math.ceil(44100 * totalDuration), 44100);
+
     let currentTime = 0;
 
     // Tulis nada ke buffer offline
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < 9; r++) {
-            if (grid[r][c]) {
+            if (grid[r] && grid[r][c]) {
                 const osc = offlineCtx.createOscillator();
                 const gain = offlineCtx.createGain();
 
                 osc.connect(gain);
                 gain.connect(offlineCtx.destination);
 
-                osc.type = recipe.waveform;
+                osc.type = recipe.waveform || "sine";
                 osc.frequency.value = notesFreq[r];
 
                 gain.gain.setValueAtTime(0.8, currentTime);
@@ -256,12 +324,12 @@ async function renderOfflineAudio(recipe) {
 
     // Eksekusi render
     const renderedBuffer = await offlineCtx.startRendering();
-    
+
     // Konversi Buffer ke WAV
     const wavData = audioBufferToWav(renderedBuffer);
     const blob = new Blob([new DataView(wavData)], { type: "audio/wav" });
-    
-    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl); // Bersihkan URL lama
+
+    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
     currentAudioUrl = URL.createObjectURL(blob);
 
     statusText.innerHTML = "Berhasil! Siap disimpan.";
@@ -280,22 +348,35 @@ function audioBufferToWav(buffer) {
     function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
     function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
 
-    setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
-    setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
-    setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan);
-    setUint16(numOfChan * 2); setUint16(16);
-    setUint32(0x61746164); setUint32(length - pos - 4);
+    // RIFF header
+    setUint32(0x46464952); // "RIFF"
+    setUint32(length - 8);
+    setUint32(0x45564157); // "WAVE"
+    setUint32(0x20746d66); // "fmt "
+    setUint32(16);
+    setUint16(1);
+    setUint16(numOfChan);
+    setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+    setUint32(0x61746164); // "data"
+    setUint32(length - pos - 4);
 
-    for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+    for (i = 0; i < buffer.numberOfChannels; i++) {
+        channels.push(buffer.getChannelData(i));
+    }
 
     while (pos < length) {
         for (i = 0; i < numOfChan; i++) {
             sample = Math.max(-1, Math.min(1, channels[i][offset]));
-            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
-            view.setInt16(pos, sample, true); pos += 2;
+            sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
+            pos += 2;
         }
         offset++;
     }
+
     return bufferArray;
 }
 
@@ -306,7 +387,7 @@ function openModal() {
 
 function closeModal() {
     saveModal.style.display = "none";
-    statusText.innerHTML = "Menunggu resep baru (Tekan Ctrl+V)...";
+    statusText.innerHTML = "Menunggu resep baru. Tekan <b>Ctrl + V</b> kapan saja...";
 }
 
 function executeDownload() {
