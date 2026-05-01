@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Renderer.exe</title>
+
+<style>
+/* Estetika Windows 95 */
+body {
+    margin: 0;
+    background: #008080;
+    font-family: 'MS Sans Serif', Tahoma, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.window {
+    background: #c0c0c0;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #000000;
+    border-bottom: 2px solid #000000;
+    padding: 2px;
+    box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    width: 400px;
+    max-width: 90vw;
+}
+
+.title-bar {
+    background: #000080;
+    color: white;
+    padding: 3px 5px;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+}
+
+.status-box {
+    background: #ffffff;
+    border: 2px inset #ffffff;
+    padding: 10px;
+    font-size: 12px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Modal Popup Save As */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none; /* Sembunyi secara default */
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-window {
+    width: 350px;
+}
+
+.modal-content {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.input-group label {
+    font-size: 12px;
+    width: 80px;
+    text-align: left;
+}
+
+input[type="text"] {
+    font-family: inherit;
+    background: #ffffff;
+    border: 2px inset #ffffff;
+    padding: 4px;
+    font-size: 12px;
+    flex-grow: 1;
+}
+
+.button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+button.win-btn {
+    padding: 4px 15px;
+    font-family: inherit;
+    font-size: 12px;
+    background: #c0c0c0;
+    border: 2px outset #ffffff;
+    cursor: pointer;
+    min-width: 70px;
+}
+
+button.win-btn:active {
+    border: 2px inset #ffffff;
+    background: #e0e0e0;
+}
+
+/* Teks area ini disembunyikan total, hanya sebagai fallback */
+#hiddenPasteArea {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+}
+</style>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">
+        <span>Audio Recipe Processor.exe</span>
+    </div>
+    <div class="content">
+        <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px; margin: 0 auto;">
+        <div class="status-box" id="statusText">
+            Siap. Tekan <b>Ctrl + V</b> di mana saja untuk memproses resep...
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="saveModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Save Audio As...</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 2px;" onclick="closeModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px; margin-bottom: 5px;">Penyusunan file selesai. Simpan sebagai:</div>
+            
+            <div class="input-group">
+                <label>File name:</label>
+                <input type="text" id="fileNameInput" value="My_Sequence.wav">
+            </div>
+            
+            <div class="button-group">
+                <button class="win-btn" onclick="executeDownload()">Save</button>
+                <button class="win-btn" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<textarea id="hiddenPasteArea"></textarea>
+
+<script>
+// --- KONFIGURASI FREKUENSI NADA ---
+const notesFreq = [
+    293.66, 261.63, 233.08, 207.65, 196.00, 174.61, 155.56, 146.83, 130.81
+];
+
+const statusText = document.getElementById("statusText");
+const saveModal = document.getElementById("saveModal");
+let currentAudioUrl = null;
+
+// --- LISTENER PASTE GLOBAL ---
+// Menangkap perintah Ctrl+V atau Paste di mana saja pada halaman
+window.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const pasteData = (e.clipboardData || window.clipboardData).getData("text");
+    processData(pasteData);
+});
+
+// --- PROSES JSON KE AUDIO ---
+async function processData(data) {
+    try {
+        const recipe = JSON.parse(data);
+        
+        // Validasi dasar struktur JSON
+        if (!recipe.bpm || !recipe.grid || !recipe.cols) {
+            throw new Error("Format JSON tidak dikenali.");
+        }
+
+        statusText.innerHTML = "Membaca resep...<br>Memasak audio secara diam-diam...";
+        
+        // Jeda sebentar agar UI sempat update sebelum CPU terkunci untuk render
+        setTimeout(() => {
+            renderOfflineAudio(recipe).catch(err => {
+                console.error(err);
+                statusText.innerHTML = `<span style="color:red">Gagal merender audio.</span>`;
+            });
+        }, 100);
+
+    } catch (err) {
+        statusText.innerHTML = `<span style="color:red">Error: Data di clipboard bukan resep musik yang valid.</span>`;
+        console.error("Paste Error:", err);
+    }
+}
+
+// --- ENGINE RENDER AUDIO (SILUMAN) ---
+async function renderOfflineAudio(recipe) {
+    const bpm = recipe.bpm;
+    const speedSeconds = (60 / bpm) / 4; 
+    const noteLength = recipe.noteLength;
+    const cols = recipe.cols;
+    const grid = recipe.grid;
+
+    const totalDuration = (cols * speedSeconds) + noteLength + 0.5; 
+    
+    // OfflineAudioContext memproses audio secepat mungkin tanpa mengeluarkannya ke speaker
+    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100 * totalDuration, 44100);
+    
+    let currentTime = 0;
+
+    // Tulis nada ke buffer offline
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < 9; r++) {
+            if (grid[r][c]) {
+                const osc = offlineCtx.createOscillator();
+                const gain = offlineCtx.createGain();
+
+                osc.connect(gain);
+                gain.connect(offlineCtx.destination);
+
+                osc.type = recipe.waveform;
+                osc.frequency.value = notesFreq[r];
+
+                gain.gain.setValueAtTime(0.8, currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, currentTime + noteLength);
+
+                osc.start(currentTime);
+                osc.stop(currentTime + noteLength + 0.1);
+            }
+        }
+        currentTime += speedSeconds;
+    }
+
+    // Eksekusi render
+    const renderedBuffer = await offlineCtx.startRendering();
+    
+    // Konversi Buffer ke WAV
+    const wavData = audioBufferToWav(renderedBuffer);
+    const blob = new Blob([new DataView(wavData)], { type: "audio/wav" });
+    
+    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl); // Bersihkan URL lama
+    currentAudioUrl = URL.createObjectURL(blob);
+
+    statusText.innerHTML = "Berhasil! Siap disimpan.";
+    openModal();
+}
+
+// --- CONVERTER BUFFER KE WAV ---
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const length = buffer.length * numOfChan * 2 + 44;
+    const bufferArray = new ArrayBuffer(length);
+    const view = new DataView(bufferArray);
+    const channels = [];
+    let i, sample, offset = 0, pos = 0;
+
+    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+    setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
+    setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
+    setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2); setUint16(16);
+    setUint32(0x61746164); setUint32(length - pos - 4);
+
+    for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+
+    while (pos < length) {
+        for (i = 0; i < numOfChan; i++) {
+            sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true); pos += 2;
+        }
+        offset++;
+    }
+    return bufferArray;
+}
+
+// --- LOGIKA UI POPUP ---
+function openModal() {
+    saveModal.style.display = "flex";
+}
+
+function closeModal() {
+    saveModal.style.display = "none";
+    statusText.innerHTML = "Menunggu resep baru (Tekan Ctrl+V)...";
+}
+
+function executeDownload() {
+    let fileName = document.getElementById("fileNameInput").value.trim();
+    if (!fileName) fileName = "My_Sequence.wav";
+
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = currentAudioUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    closeModal();
+}
+</script>
+</body>
+</html>
