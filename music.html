@@ -72,6 +72,8 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    padding: 12px;
+    box-sizing: border-box;
 }
 
 .modal-window {
@@ -98,7 +100,7 @@ body {
     text-align: left;
 }
 
-input[type="text"] {
+input[type="text"], textarea {
     font-family: inherit;
     background: #ffffff;
     border: 2px inset #ffffff;
@@ -106,6 +108,14 @@ input[type="text"] {
     font-size: 12px;
     flex-grow: 1;
     min-width: 0;
+    box-sizing: border-box;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.4;
 }
 
 .button-group {
@@ -113,6 +123,7 @@ input[type="text"] {
     justify-content: flex-end;
     gap: 10px;
     margin-top: 10px;
+    flex-wrap: wrap;
 }
 
 button.win-btn {
@@ -135,6 +146,11 @@ button.win-btn:active {
     left: -9999px;
     top: -9999px;
 }
+.small-muted {
+    font-size: 11px;
+    color: #444;
+    line-height: 1.4;
+}
 </style>
 </head>
 <body>
@@ -151,11 +167,12 @@ button.win-btn:active {
     </div>
 </div>
 
+<!-- Modal Save As -->
 <div class="modal-overlay" id="saveModal">
     <div class="window modal-window">
         <div class="title-bar">
             <span>Save Audio As...</span>
-            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 2px;" onclick="closeModal()">X</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 2px;" onclick="closeSaveModal()">X</span>
         </div>
         <div class="modal-content">
             <div style="font-size: 12px; margin-bottom: 5px;">Penyusunan file selesai. Simpan sebagai:</div>
@@ -167,7 +184,27 @@ button.win-btn:active {
 
             <div class="button-group">
                 <button class="win-btn" onclick="executeDownload()">Save</button>
-                <button class="win-btn" onclick="closeModal()">Cancel</button>
+                <button class="win-btn" onclick="closeSaveModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Fallback Input -->
+<div class="modal-overlay" id="inputModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Cook The Code</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 2px;" onclick="closeInputModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px; margin-bottom: 2px;">
+                Clipboard tidak bisa dibaca otomatis. Tempel JSON resep di bawah, lalu tekan <b>cook the code</b>.
+            </div>
+            <textarea id="manualJsonInput" placeholder='{"Name":"My_Sequence.wav","bpm":120,...}' spellcheck="false"></textarea>
+            <div class="button-group">
+                <button class="win-btn" onclick="cookTheCode()">cook the code</button>
+                <button class="win-btn" onclick="closeInputModal()">cancel</button>
             </div>
         </div>
     </div>
@@ -183,14 +220,23 @@ const notesFreq = [
 
 const statusText = document.getElementById("statusText");
 const saveModal = document.getElementById("saveModal");
+const inputModal = document.getElementById("inputModal");
+const manualJsonInput = document.getElementById("manualJsonInput");
 
 let currentAudioUrl = null;
 let hasProcessedClipboard = false;
 let autoReadAttempted = false;
+let currentDefaultFileName = "My_Sequence.wav";
+let currentRecipeName = "My_Sequence.wav";
 
 // --- LISTENER PASTE GLOBAL ---
-// Menangkap perintah Ctrl+V atau Paste di mana saja pada halaman
+// Jika user paste langsung saat modal fallback terbuka, biarkan textarea menerima paste normal.
+// Di tempat lain, tangkap lalu proses.
 window.addEventListener("paste", (e) => {
+    if (inputModal.classList.contains("show") && e.target === manualJsonInput) {
+        return;
+    }
+
     e.preventDefault();
     const pasteData = (e.clipboardData || window.clipboardData).getData("text");
     processClipboardText(pasteData);
@@ -212,12 +258,40 @@ window.addEventListener("focus", () => {
     }
 });
 
+function showModal(modalEl) {
+    modalEl.classList.add("show");
+    modalEl.style.display = "flex";
+}
+
+function hideModal(modalEl) {
+    modalEl.classList.remove("show");
+    modalEl.style.display = "none";
+}
+
+function ensureWavExtension(name) {
+    let fileName = (name || "").trim() || "My_Sequence.wav";
+    if (!/\.wav$/i.test(fileName)) {
+        fileName += ".wav";
+    }
+    return fileName;
+}
+
+function sanitizeFileBaseName(name) {
+    return (name || "My_Sequence")
+        .toString()
+        .trim()
+        .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+        .replace(/\s+/g, "_")
+        .slice(0, 80) || "My_Sequence";
+}
+
 async function tryAutoReadClipboard() {
     if (hasProcessedClipboard || autoReadAttempted) return;
     autoReadAttempted = true;
 
     if (!navigator.clipboard || !navigator.clipboard.readText) {
-        statusText.innerHTML = "Clipboard otomatis tidak didukung. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+        statusText.innerHTML = "Clipboard otomatis tidak didukung. Tempel resep di popup.";
+        openInputModal();
         return;
     }
 
@@ -228,18 +302,43 @@ async function tryAutoReadClipboard() {
         if (typeof text === "string" && text.trim()) {
             processClipboardText(text.trim());
         } else {
-            statusText.innerHTML = "Clipboard kosong. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+            statusText.innerHTML = "Clipboard kosong. Tempel resep di popup.";
+            openInputModal();
         }
     } catch (err) {
         console.error("Auto clipboard read failed:", err);
-        statusText.innerHTML = "Akses clipboard ditolak browser. Tekan <b>Ctrl + V</b> untuk memproses resep.";
+        statusText.innerHTML = "Akses clipboard ditolak browser. Tempel resep di popup.";
+        openInputModal();
     }
 }
 
 function processClipboardText(pasteData) {
     if (hasProcessedClipboard) return;
     hasProcessedClipboard = true;
+    closeInputModal();
     processData(pasteData);
+}
+
+function openInputModal(prefillText = "") {
+    manualJsonInput.value = prefillText || manualJsonInput.value || "";
+    showModal(inputModal);
+    setTimeout(() => manualJsonInput.focus(), 0);
+}
+
+function closeInputModal() {
+    hideModal(inputModal);
+}
+
+function openSaveModal(defaultName = currentDefaultFileName) {
+    const input = document.getElementById("fileNameInput");
+    input.value = ensureWavExtension(defaultName);
+    showModal(saveModal);
+    setTimeout(() => input.focus(), 0);
+}
+
+function closeSaveModal() {
+    hideModal(saveModal);
+    statusText.innerHTML = "Menunggu resep baru. Tekan <b>Ctrl + V</b> kapan saja...";
 }
 
 // --- PROSES JSON KE AUDIO ---
@@ -262,9 +361,15 @@ async function processData(data) {
             throw new Error("Grid tidak valid.");
         }
 
-        statusText.innerHTML = "Membaca resep...<br>Mengolah audio secara diam-diam...";
+        currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim()
+            ? recipe.Name.trim()
+            : "My_Sequence.wav";
 
-        // Jeda sebentar agar UI sempat update sebelum CPU terkunci untuk render
+        currentDefaultFileName = ensureWavExtension(currentRecipeName);
+
+        statusText.innerHTML = "Membaca resep...<br>Mengolah audio...";
+
+        // Jeda sebentar agar UI sempat update
         setTimeout(() => {
             renderOfflineAudio(recipe).catch(err => {
                 console.error(err);
@@ -277,6 +382,7 @@ async function processData(data) {
         statusText.innerHTML = `<span style="color:red">Error: Data di clipboard bukan resep musik yang valid.</span>`;
         console.error("Paste Error:", err);
         hasProcessedClipboard = false;
+        openInputModal();
     }
 }
 
@@ -299,7 +405,6 @@ async function renderOfflineAudio(recipe) {
 
     let currentTime = 0;
 
-    // Tulis nada ke buffer offline
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < 9; r++) {
             if (grid[r] && grid[r][c]) {
@@ -322,18 +427,17 @@ async function renderOfflineAudio(recipe) {
         currentTime += speedSeconds;
     }
 
-    // Eksekusi render
     const renderedBuffer = await offlineCtx.startRendering();
 
     // Konversi Buffer ke WAV
     const wavData = audioBufferToWav(renderedBuffer);
-    const blob = new Blob([new DataView(wavData)], { type: "audio/wav" });
+    const blob = new Blob([wavData], { type: "audio/wav" });
 
     if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
     currentAudioUrl = URL.createObjectURL(blob);
 
     statusText.innerHTML = "Berhasil! Siap disimpan.";
-    openModal();
+    openSaveModal(currentDefaultFileName);
 }
 
 // --- CONVERTER BUFFER KE WAV ---
@@ -343,10 +447,19 @@ function audioBufferToWav(buffer) {
     const bufferArray = new ArrayBuffer(length);
     const view = new DataView(bufferArray);
     const channels = [];
-    let i, sample, offset = 0, pos = 0;
+    let sample;
+    let offset = 0;
+    let pos = 0;
 
-    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
-    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+    function setUint16(data) {
+        view.setUint16(pos, data, true);
+        pos += 2;
+    }
+
+    function setUint32(data) {
+        view.setUint32(pos, data, true);
+        pos += 4;
+    }
 
     // RIFF header
     setUint32(0x46464952); // "RIFF"
@@ -363,12 +476,12 @@ function audioBufferToWav(buffer) {
     setUint32(0x61746164); // "data"
     setUint32(length - pos - 4);
 
-    for (i = 0; i < buffer.numberOfChannels; i++) {
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
         channels.push(buffer.getChannelData(i));
     }
 
     while (pos < length) {
-        for (i = 0; i < numOfChan; i++) {
+        for (let i = 0; i < numOfChan; i++) {
             sample = Math.max(-1, Math.min(1, channels[i][offset]));
             sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
             view.setInt16(pos, sample, true);
@@ -381,18 +494,9 @@ function audioBufferToWav(buffer) {
 }
 
 // --- LOGIKA UI POPUP ---
-function openModal() {
-    saveModal.style.display = "flex";
-}
-
-function closeModal() {
-    saveModal.style.display = "none";
-    statusText.innerHTML = "Menunggu resep baru. Tekan <b>Ctrl + V</b> kapan saja...";
-}
-
 function executeDownload() {
     let fileName = document.getElementById("fileNameInput").value.trim();
-    if (!fileName) fileName = "My_Sequence.wav";
+    fileName = ensureWavExtension(fileName);
 
     const a = document.createElement("a");
     a.style.display = "none";
@@ -402,8 +506,27 @@ function executeDownload() {
     a.click();
     document.body.removeChild(a);
 
-    closeModal();
+    closeSaveModal();
 }
+
+function cookTheCode() {
+    const raw = manualJsonInput.value.trim();
+    if (!raw) {
+        statusText.innerHTML = `<span style="color:red">Textarea masih kosong.</span>`;
+        return;
+    }
+
+    hasProcessedClipboard = true;
+    closeInputModal();
+    processData(raw);
+}
+
+// Optional: tekan Ctrl+Enter di popup fallback untuk cook the code
+manualJsonInput.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        cookTheCode();
+    }
+});
 </script>
 </body>
 </html>
