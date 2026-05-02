@@ -3,6 +3,1188 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Maker - Audio Renderer</title>
+
+<style>
+/* Estetika Windows 95 Pro Audio Edition */
+body {
+    margin: 0;
+    background: #008080;
+    font-family: 'MS Sans Serif', Tahoma, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.window {
+    background: #c0c0c0;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #000000;
+    border-bottom: 2px solid #000000;
+    padding: 2px;
+    box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    width: 450px;
+    max-width: 95vw;
+}
+
+.title-bar {
+    background: #000080;
+    color: white;
+    padding: 4px 6px;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.content {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Console/Terminal Log Box */
+.console-container {
+    background: #808080;
+    border: 2px inset #ffffff;
+    padding: 4px;
+}
+
+.console-box {
+    background: #000000;
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    padding: 10px;
+    height: 120px;
+    overflow-y: auto;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.console-box p {
+    margin: 0;
+}
+
+.blink {
+    animation: blinker 1s linear infinite;
+}
+
+@keyframes blinker {
+    50% { opacity: 0; }
+}
+
+/* Modal Popup Save As */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+.modal-window {
+    width: 380px;
+    max-width: 95vw;
+}
+
+.modal-content {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.input-group label {
+    font-size: 12px;
+    width: 80px;
+    text-align: left;
+    font-weight: bold;
+}
+
+input[type="text"], textarea {
+    font-family: inherit;
+    background: #ffffff;
+    border: 2px inset #ffffff;
+    padding: 6px;
+    font-size: 13px;
+    flex-grow: 1;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.4;
+}
+
+.button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+}
+
+button.win-btn {
+    padding: 6px 15px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    background: #c0c0c0;
+    border: 2px outset #ffffff;
+    cursor: pointer;
+    min-width: 80px;
+}
+
+button.win-btn:active {
+    border: 2px inset #ffffff;
+    background: #e0e0e0;
+}
+
+#hiddenPasteArea {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+}
+
+.info-text {
+    font-size: 12px;
+    color: #000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">
+        <span>DSP Audio Renderer.exe</span>
+        <span style="font-size: 11px;">v2.0</span>
+    </div>
+    <div class="content">
+        <div class="info-text">
+            <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px;">
+            <div>
+                <strong>Music Maker Rendering Engine</strong><br>
+                <span style="font-size: 11px; color: #444;">Supports: ADSR, Delay FX, Swing, Multi-Scale</span>
+            </div>
+        </div>
+        
+        <div class="console-container">
+            <div class="console-box" id="consoleBox">
+                <p>C:\> DSP_ENGINE_INIT</p>
+                <p>Waiting for sequence data... <span class="blink">_</span></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="saveModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Save Output Audio</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 4px;" onclick="closeSaveModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px;">Proses rendering selesai. Simpan file WAV:</div>
+
+            <div class="input-group">
+                <label>File name:</label>
+                <input type="text" id="fileNameInput" value="My_Sequence.wav">
+            </div>
+
+            <div class="button-group">
+                <button class="win-btn" onclick="executeDownload()">Save Disk</button>
+                <button class="win-btn" onclick="closeSaveModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="inputModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Manual Data Input</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 4px;" onclick="closeInputModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px; margin-bottom: 2px;">
+                Tempel (Paste) kode resep JSON dari Music Maker ke kotak di bawah ini:
+            </div>
+            <textarea id="manualJsonInput" placeholder='{"Name":"My_Song","bpm":120,...}' spellcheck="false"></textarea>
+            <div class="button-group">
+                <button class="win-btn" onclick="cookTheCode()">Render Audio</button>
+                <button class="win-btn" onclick="closeInputModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<textarea id="hiddenPasteArea"></textarea>
+
+<script>
+// --- KONFIGURASI SCALES (Sinkron dengan Music Maker) ---
+const SCALES = {
+    minor: [523.25, 466.16, 392.00, 349.23, 311.13, 261.63, 233.08, 196.00, 130.81],
+    major: [523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66, 261.63, 130.81],
+    pentatonic: [622.25, 523.25, 466.16, 392.00, 311.13, 261.63, 233.08, 196.00, 130.81],
+    blues: [622.25, 523.25, 466.16, 392.00, 369.99, 349.23, 311.13, 261.63, 130.81],
+    hirajoshi: [523.25, 415.30, 392.00, 311.13, 261.63, 207.65, 196.00, 155.56, 130.81]
+};
+
+const consoleBox = document.getElementById("consoleBox");
+const saveModal = document.getElementById("saveModal");
+const inputModal = document.getElementById("inputModal");
+const manualJsonInput = document.getElementById("manualJsonInput");
+
+let currentAudioUrl = null;
+let hasProcessedClipboard = false;
+let autoReadAttempted = false;
+let currentDefaultFileName = "My_Sequence.wav";
+let currentRecipeName = "My_Sequence.wav";
+
+// --- UTILITY LOGGING ---
+function logConsole(text, overwriteLast = false) {
+    // Hilangkan kursor blink sebelumnya
+    consoleBox.innerHTML = consoleBox.innerHTML.replace('<span class="blink">_</span>', '');
+    
+    if (overwriteLast) {
+        const pTags = consoleBox.getElementsByTagName('p');
+        if (pTags.length > 0) {
+            consoleBox.removeChild(pTags[pTags.length - 1]);
+        }
+    }
+    
+    consoleBox.innerHTML += `<p>> ${text} <span class="blink">_</span></p>`;
+    consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+// --- LISTENER PASTE GLOBAL ---
+window.addEventListener("paste", (e) => {
+    if (inputModal.classList.contains("show") && e.target === manualJsonInput) {
+        return;
+    }
+    e.preventDefault();
+    const pasteData = (e.clipboardData || window.clipboardData).getData("text");
+    processClipboardText(pasteData);
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => { tryAutoReadClipboard(); }, 200);
+});
+
+window.addEventListener("focus", () => {
+    if (!hasProcessedClipboard && !autoReadAttempted) {
+        setTimeout(() => { tryAutoReadClipboard(); }, 200);
+    }
+});
+
+function showModal(modalEl) {
+    modalEl.classList.add("show");
+    modalEl.style.display = "flex";
+}
+
+function hideModal(modalEl) {
+    modalEl.classList.remove("show");
+    modalEl.style.display = "none";
+}
+
+function ensureWavExtension(name) {
+    let fileName = (name || "").trim() || "My_Sequence.wav";
+    if (!/\.wav$/i.test(fileName)) fileName += ".wav";
+    return fileName;
+}
+
+async function tryAutoReadClipboard() {
+    if (hasProcessedClipboard || autoReadAttempted) return;
+    autoReadAttempted = true;
+
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+        logConsole("Clipboard API error. Fallback to manual input.");
+        openInputModal();
+        return;
+    }
+
+    try {
+        logConsole("Requesting clipboard access...");
+        const text = await navigator.clipboard.readText();
+
+        if (typeof text === "string" && text.trim()) {
+            processClipboardText(text.trim());
+        } else {
+            logConsole("Clipboard is empty.");
+            openInputModal();
+        }
+    } catch (err) {
+        logConsole("Clipboard access denied. Please paste manually.");
+        openInputModal();
+    }
+}
+
+function processClipboardText(pasteData) {
+    if (hasProcessedClipboard) return;
+    hasProcessedClipboard = true;
+    closeInputModal();
+    processData(pasteData);
+}
+
+function openInputModal(prefillText = "") {
+    manualJsonInput.value = prefillText || manualJsonInput.value || "";
+    showModal(inputModal);
+    setTimeout(() => manualJsonInput.focus(), 0);
+}
+
+function closeInputModal() {
+    hideModal(inputModal);
+}
+
+function openSaveModal(defaultName = currentDefaultFileName) {
+    const input = document.getElementById("fileNameInput");
+    input.value = ensureWavExtension(defaultName);
+    showModal(saveModal);
+    setTimeout(() => input.focus(), 0);
+}
+
+function closeSaveModal() {
+    hideModal(saveModal);
+    logConsole("Awaiting new sequence data (Ctrl+V)...");
+    hasProcessedClipboard = false;
+    autoReadAttempted = false;
+}
+
+// --- PROSES JSON KE AUDIO ---
+async function processData(data) {
+    try {
+        logConsole("Parsing JSON data...");
+        const recipe = JSON.parse(data);
+
+        if (!recipe || typeof recipe !== "object" || typeof recipe.bpm !== "number" || !Array.isArray(recipe.grid)) {
+            throw new Error("Invalid JSON Signature.");
+        }
+
+        currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim() ? recipe.Name.trim() : "My_Sequence";
+        currentDefaultFileName = ensureWavExtension(currentRecipeName);
+
+        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Scale: ${recipe.scaleSelect || 'minor'}`);
+        logConsole("Allocating DSP Memory...");
+
+        setTimeout(() => {
+            renderOfflineAudio(recipe).catch(err => {
+                logConsole(`[ERROR] Render failed: ${err.message}`);
+                hasProcessedClipboard = false;
+            });
+        }, 500);
+
+    } catch (err) {
+        logConsole(`[FATAL] JSON parse error! Not a valid recipe.`);
+        console.error(err);
+        hasProcessedClipboard = false;
+        setTimeout(() => openInputModal(), 1000);
+    }
+}
+
+// --- ENGINE RENDER AUDIO (OFFLINE CONTEXT) ---
+async function renderOfflineAudio(recipe) {
+    const bpm = recipe.bpm || 120;
+    const baseSpeedSec = (60 / bpm) / 4;
+    const cols = recipe.cols;
+    const grid = recipe.grid;
+    
+    // Fallback support parameter baru
+    const scaleNotes = SCALES[recipe.scaleSelect] || SCALES["minor"];
+    const attack = recipe.attack !== undefined ? recipe.attack : 0.05;
+    const release = recipe.release !== undefined ? recipe.release : 0.3;
+    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.0;
+    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.0;
+    const waveform = recipe.waveform || "sawtooth";
+
+    // Kalkulasi Total Durasi: Waktu langkah + Panjang Note + Ekor FX (Delay)
+    const tailDuration = 3.5; // Ekor gema 3.5 detik
+    const totalDuration = (cols * baseSpeedSec) + tailDuration;
+
+    logConsole(`Target Length: ${totalDuration.toFixed(2)}s`);
+    logConsole(`Executing Render Loop...`);
+
+    const OfflineAudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineAudioCtx) throw new Error("OfflineAudioContext not supported.");
+
+    const offlineCtx = new OfflineAudioCtx(1, Math.ceil(44100 * totalDuration), 44100);
+
+    // --- SETUP ROUTING ---
+    const masterOut = offlineCtx.createGain();
+    masterOut.connect(offlineCtx.destination);
+    masterOut.gain.value = 0.8;
+
+    const delayBus = offlineCtx.createGain();
+    const delayNode = offlineCtx.createDelay(1.0);
+    const feedbackNode = offlineCtx.createGain();
+
+    delayNode.delayTime.value = 0.33;
+    feedbackNode.gain.value = 0.4;
+    delayBus.gain.value = delayAmt;
+
+    delayBus.connect(delayNode);
+    delayNode.connect(feedbackNode);
+    feedbackNode.connect(delayNode);
+    delayNode.connect(offlineCtx.destination);
+
+    // Render White Noise Buffer sekali untuk snare
+    const snareBufferSize = offlineCtx.sampleRate * 0.1; 
+    const snareBuffer = offlineCtx.createBuffer(1, snareBufferSize, offlineCtx.sampleRate);
+    const snareData = snareBuffer.getChannelData(0);
+    for (let i = 0; i < snareBufferSize; i++) snareData[i] = Math.random() * 2 - 1;
+
+    let currentTime = 0;
+
+    // --- RENDER LOOP ---
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < grid.length; r++) { // Bisa 9 baris (old) atau 11 baris (new)
+            if (grid[r] && grid[r][c]) {
+                if (r === 9) {
+                    // --- KICK DRUM ---
+                    const osc = offlineCtx.createOscillator();
+                    const gain = offlineCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(masterOut);
+
+                    osc.frequency.setValueAtTime(150, currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+
+                    gain.gain.setValueAtTime(1, currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+
+                    osc.start(currentTime);
+                    osc.stop(currentTime + 0.5);
+                } else if (r === 10) {
+                    // --- SNARE DRUM ---
+                    const noise = offlineCtx.createBufferSource();
+                    noise.buffer = snareBuffer;
+
+                    const filter = offlineCtx.createBiquadFilter();
+                    filter.type = "bandpass";
+                    filter.frequency.value = 4000;
+
+                    const gain = offlineCtx.createGain();
+                    gain.gain.setValueAtTime(0.8, currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.1); 
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterOut);
+
+                    noise.start(currentTime);
+                } else if (r >= 0 && r <= 8) {
+                    // --- SYNTH NADA ---
+                    const osc = offlineCtx.createOscillator();
+                    const filter = offlineCtx.createBiquadFilter();
+                    const gain = offlineCtx.createGain();
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterOut);
+                    gain.connect(delayBus);
+
+                    osc.type = waveform;
+                    osc.frequency.value = scaleNotes[r];
+
+                    // Lowpass filter sweep
+                    filter.type = "lowpass";
+                    filter.frequency.setValueAtTime(300, currentTime); 
+                    filter.frequency.exponentialRampToValueAtTime(3000, currentTime + 0.05);
+
+                    // ADSR Envelope
+                    gain.gain.setValueAtTime(0, currentTime);
+                    gain.gain.linearRampToValueAtTime(0.7, currentTime + attack);
+                    gain.gain.exponentialRampToValueAtTime(0.001, currentTime + attack + release);
+
+                    osc.start(currentTime);
+                    osc.stop(currentTime + attack + release + 0.1);
+                }
+            }
+        }
+
+        // --- SCHEDULING & SWING ---
+        if (c % 2 === 0) { // Langkah genap, delay ke ganjil dikurangi
+            currentTime += baseSpeedSec * (1 - swingAmt);
+        } else { // Langkah ganjil, delay ke genap ditambah
+            currentTime += baseSpeedSec * (1 + swingAmt);
+        }
+    }
+
+    logConsole(`Writing buffer memory...`, true);
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    logConsole(`Encoding to .WAV format...`);
+    const wavData = audioBufferToWav(renderedBuffer);
+    const blob = new Blob([wavData], { type: "audio/wav" });
+
+    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+    currentAudioUrl = URL.createObjectURL(blob);
+
+    logConsole(`SUCCESS! Audio is ready.`);
+    setTimeout(() => openSaveModal(currentDefaultFileName), 500);
+}
+
+// --- CONVERTER BUFFER KE WAV ---
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const length = buffer.length * numOfChan * 2 + 44;
+    const bufferArray = new ArrayBuffer(length);
+    const view = new DataView(bufferArray);
+    const channels = [];
+    let sample, offset = 0, pos = 0;
+
+    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+    setUint32(0x46464952); // "RIFF"
+    setUint32(length - 8);
+    setUint32(0x45564157); // "WAVE"
+    setUint32(0x20746d66); // "fmt "
+    setUint32(16);
+    setUint16(1);
+    setUint16(numOfChan);
+    setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+    setUint32(0x61746164); // "data"
+    setUint32(length - pos - 4);
+
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+        channels.push(buffer.getChannelData(i));
+    }
+
+    while (pos < length) {
+        for (let i = 0; i < numOfChan; i++) {
+            sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+        }
+        offset++;
+    }
+
+    return bufferArray;
+}
+
+// --- UI BUTTON TRIGGERS ---
+function executeDownload() {
+    let fileName = document.getElementById("fileNameInput").value.trim();
+    fileName = ensureWavExtension(fileName);
+
+    logConsole(`Saving to disk as ${fileName}...`);
+    
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = currentAudioUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    closeSaveModal();
+}
+
+function cookTheCode() {
+    const raw = manualJsonInput.value.trim();
+    if (!raw) {
+        logConsole(`[ERROR] Text input is empty.`);
+        return;
+    }
+    hasProcessedClipboard = true;
+    closeInputModal();
+    processData(raw);
+}
+
+manualJsonInput.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") cookTheCode();
+});
+</script>
+</body>
+</html>
+
+.console-box p {
+    margin: 0;
+}
+
+.blink {
+    animation: blinker 1s linear infinite;
+}
+
+@keyframes blinker {
+    50% { opacity: 0; }
+}
+
+/* Modal Popup Save As */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+.modal-window {
+    width: 380px;
+    max-width: 95vw;
+}
+
+.modal-content {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.input-group label {
+    font-size: 12px;
+    width: 80px;
+    text-align: left;
+    font-weight: bold;
+}
+
+input[type="text"], textarea {
+    font-family: inherit;
+    background: #ffffff;
+    border: 2px inset #ffffff;
+    padding: 6px;
+    font-size: 13px;
+    flex-grow: 1;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.4;
+}
+
+.button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+}
+
+button.win-btn {
+    padding: 6px 15px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    background: #c0c0c0;
+    border: 2px outset #ffffff;
+    cursor: pointer;
+    min-width: 80px;
+}
+
+button.win-btn:active {
+    border: 2px inset #ffffff;
+    background: #e0e0e0;
+}
+
+#hiddenPasteArea {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+}
+
+.info-text {
+    font-size: 12px;
+    color: #000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">
+        <span>DSP Audio Renderer.exe</span>
+        <span style="font-size: 11px;">v2.0</span>
+    </div>
+    <div class="content">
+        <div class="info-text">
+            <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px;">
+            <div>
+                <strong>Music Maker Rendering Engine</strong><br>
+                <span style="font-size: 11px; color: #444;">Supports: ADSR, Delay FX, Swing, Multi-Scale</span>
+            </div>
+        </div>
+        
+        <div class="console-container">
+            <div class="console-box" id="consoleBox">
+                <p>C:\> DSP_ENGINE_INIT</p>
+                <p>Waiting for sequence data... <span class="blink">_</span></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="saveModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Save Output Audio</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 4px;" onclick="closeSaveModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px;">Proses rendering selesai. Simpan file WAV:</div>
+
+            <div class="input-group">
+                <label>File name:</label>
+                <input type="text" id="fileNameInput" value="My_Sequence.wav">
+            </div>
+
+            <div class="button-group">
+                <button class="win-btn" onclick="executeDownload()">Save Disk</button>
+                <button class="win-btn" onclick="closeSaveModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="inputModal">
+    <div class="window modal-window">
+        <div class="title-bar">
+            <span>Manual Data Input</span>
+            <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 4px;" onclick="closeInputModal()">X</span>
+        </div>
+        <div class="modal-content">
+            <div style="font-size: 12px; margin-bottom: 2px;">
+                Tempel (Paste) kode resep JSON dari Music Maker ke kotak di bawah ini:
+            </div>
+            <textarea id="manualJsonInput" placeholder='{"Name":"My_Song","bpm":120,...}' spellcheck="false"></textarea>
+            <div class="button-group">
+                <button class="win-btn" onclick="cookTheCode()">Render Audio</button>
+                <button class="win-btn" onclick="closeInputModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<textarea id="hiddenPasteArea"></textarea>
+
+<script>
+// --- KONFIGURASI SCALES (Sinkron dengan Music Maker) ---
+const SCALES = {
+    minor: [523.25, 466.16, 392.00, 349.23, 311.13, 261.63, 233.08, 196.00, 130.81],
+    major: [523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66, 261.63, 130.81],
+    pentatonic: [622.25, 523.25, 466.16, 392.00, 311.13, 261.63, 233.08, 196.00, 130.81],
+    blues: [622.25, 523.25, 466.16, 392.00, 369.99, 349.23, 311.13, 261.63, 130.81],
+    hirajoshi: [523.25, 415.30, 392.00, 311.13, 261.63, 207.65, 196.00, 155.56, 130.81]
+};
+
+const consoleBox = document.getElementById("consoleBox");
+const saveModal = document.getElementById("saveModal");
+const inputModal = document.getElementById("inputModal");
+const manualJsonInput = document.getElementById("manualJsonInput");
+
+let currentAudioUrl = null;
+let hasProcessedClipboard = false;
+let autoReadAttempted = false;
+let currentDefaultFileName = "My_Sequence.wav";
+let currentRecipeName = "My_Sequence.wav";
+
+// --- UTILITY LOGGING ---
+function logConsole(text, overwriteLast = false) {
+    // Hilangkan kursor blink sebelumnya
+    consoleBox.innerHTML = consoleBox.innerHTML.replace('<span class="blink">_</span>', '');
+    
+    if (overwriteLast) {
+        const pTags = consoleBox.getElementsByTagName('p');
+        if (pTags.length > 0) {
+            consoleBox.removeChild(pTags[pTags.length - 1]);
+        }
+    }
+    
+    consoleBox.innerHTML += `<p>> ${text} <span class="blink">_</span></p>`;
+    consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+// --- LISTENER PASTE GLOBAL ---
+window.addEventListener("paste", (e) => {
+    if (inputModal.classList.contains("show") && e.target === manualJsonInput) {
+        return;
+    }
+    e.preventDefault();
+    const pasteData = (e.clipboardData || window.clipboardData).getData("text");
+    processClipboardText(pasteData);
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => { tryAutoReadClipboard(); }, 200);
+});
+
+window.addEventListener("focus", () => {
+    if (!hasProcessedClipboard && !autoReadAttempted) {
+        setTimeout(() => { tryAutoReadClipboard(); }, 200);
+    }
+});
+
+function showModal(modalEl) {
+    modalEl.classList.add("show");
+    modalEl.style.display = "flex";
+}
+
+function hideModal(modalEl) {
+    modalEl.classList.remove("show");
+    modalEl.style.display = "none";
+}
+
+function ensureWavExtension(name) {
+    let fileName = (name || "").trim() || "My_Sequence.wav";
+    if (!/\.wav$/i.test(fileName)) fileName += ".wav";
+    return fileName;
+}
+
+async function tryAutoReadClipboard() {
+    if (hasProcessedClipboard || autoReadAttempted) return;
+    autoReadAttempted = true;
+
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+        logConsole("Clipboard API error. Fallback to manual input.");
+        openInputModal();
+        return;
+    }
+
+    try {
+        logConsole("Requesting clipboard access...");
+        const text = await navigator.clipboard.readText();
+
+        if (typeof text === "string" && text.trim()) {
+            processClipboardText(text.trim());
+        } else {
+            logConsole("Clipboard is empty.");
+            openInputModal();
+        }
+    } catch (err) {
+        logConsole("Clipboard access denied. Please paste manually.");
+        openInputModal();
+    }
+}
+
+function processClipboardText(pasteData) {
+    if (hasProcessedClipboard) return;
+    hasProcessedClipboard = true;
+    closeInputModal();
+    processData(pasteData);
+}
+
+function openInputModal(prefillText = "") {
+    manualJsonInput.value = prefillText || manualJsonInput.value || "";
+    showModal(inputModal);
+    setTimeout(() => manualJsonInput.focus(), 0);
+}
+
+function closeInputModal() {
+    hideModal(inputModal);
+}
+
+function openSaveModal(defaultName = currentDefaultFileName) {
+    const input = document.getElementById("fileNameInput");
+    input.value = ensureWavExtension(defaultName);
+    showModal(saveModal);
+    setTimeout(() => input.focus(), 0);
+}
+
+function closeSaveModal() {
+    hideModal(saveModal);
+    logConsole("Awaiting new sequence data (Ctrl+V)...");
+    hasProcessedClipboard = false;
+    autoReadAttempted = false;
+}
+
+// --- PROSES JSON KE AUDIO ---
+async function processData(data) {
+    try {
+        logConsole("Parsing JSON data...");
+        const recipe = JSON.parse(data);
+
+        if (!recipe || typeof recipe !== "object" || typeof recipe.bpm !== "number" || !Array.isArray(recipe.grid)) {
+            throw new Error("Invalid JSON Signature.");
+        }
+
+        currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim() ? recipe.Name.trim() : "My_Sequence";
+        currentDefaultFileName = ensureWavExtension(currentRecipeName);
+
+        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Scale: ${recipe.scaleSelect || 'minor'}`);
+        logConsole("Allocating DSP Memory...");
+
+        setTimeout(() => {
+            renderOfflineAudio(recipe).catch(err => {
+                logConsole(`[ERROR] Render failed: ${err.message}`);
+                hasProcessedClipboard = false;
+            });
+        }, 500);
+
+    } catch (err) {
+        logConsole(`[FATAL] JSON parse error! Not a valid recipe.`);
+        console.error(err);
+        hasProcessedClipboard = false;
+        setTimeout(() => openInputModal(), 1000);
+    }
+}
+
+// --- ENGINE RENDER AUDIO (OFFLINE CONTEXT) ---
+async function renderOfflineAudio(recipe) {
+    const bpm = recipe.bpm || 120;
+    const baseSpeedSec = (60 / bpm) / 4;
+    const cols = recipe.cols;
+    const grid = recipe.grid;
+    
+    // Fallback support parameter baru
+    const scaleNotes = SCALES[recipe.scaleSelect] || SCALES["minor"];
+    const attack = recipe.attack !== undefined ? recipe.attack : 0.05;
+    const release = recipe.release !== undefined ? recipe.release : 0.3;
+    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.0;
+    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.0;
+    const waveform = recipe.waveform || "sawtooth";
+
+    // Kalkulasi Total Durasi: Waktu langkah + Panjang Note + Ekor FX (Delay)
+    const tailDuration = 3.5; // Ekor gema 3.5 detik
+    const totalDuration = (cols * baseSpeedSec) + tailDuration;
+
+    logConsole(`Target Length: ${totalDuration.toFixed(2)}s`);
+    logConsole(`Executing Render Loop...`);
+
+    const OfflineAudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineAudioCtx) throw new Error("OfflineAudioContext not supported.");
+
+    const offlineCtx = new OfflineAudioCtx(1, Math.ceil(44100 * totalDuration), 44100);
+
+    // --- SETUP ROUTING ---
+    const masterOut = offlineCtx.createGain();
+    masterOut.connect(offlineCtx.destination);
+    masterOut.gain.value = 0.8;
+
+    const delayBus = offlineCtx.createGain();
+    const delayNode = offlineCtx.createDelay(1.0);
+    const feedbackNode = offlineCtx.createGain();
+
+    delayNode.delayTime.value = 0.33;
+    feedbackNode.gain.value = 0.4;
+    delayBus.gain.value = delayAmt;
+
+    delayBus.connect(delayNode);
+    delayNode.connect(feedbackNode);
+    feedbackNode.connect(delayNode);
+    delayNode.connect(offlineCtx.destination);
+
+    // Render White Noise Buffer sekali untuk snare
+    const snareBufferSize = offlineCtx.sampleRate * 0.1; 
+    const snareBuffer = offlineCtx.createBuffer(1, snareBufferSize, offlineCtx.sampleRate);
+    const snareData = snareBuffer.getChannelData(0);
+    for (let i = 0; i < snareBufferSize; i++) snareData[i] = Math.random() * 2 - 1;
+
+    let currentTime = 0;
+
+    // --- RENDER LOOP ---
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < grid.length; r++) { // Bisa 9 baris (old) atau 11 baris (new)
+            if (grid[r] && grid[r][c]) {
+                if (r === 9) {
+                    // --- KICK DRUM ---
+                    const osc = offlineCtx.createOscillator();
+                    const gain = offlineCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(masterOut);
+
+                    osc.frequency.setValueAtTime(150, currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+
+                    gain.gain.setValueAtTime(1, currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+
+                    osc.start(currentTime);
+                    osc.stop(currentTime + 0.5);
+                } else if (r === 10) {
+                    // --- SNARE DRUM ---
+                    const noise = offlineCtx.createBufferSource();
+                    noise.buffer = snareBuffer;
+
+                    const filter = offlineCtx.createBiquadFilter();
+                    filter.type = "bandpass";
+                    filter.frequency.value = 4000;
+
+                    const gain = offlineCtx.createGain();
+                    gain.gain.setValueAtTime(0.8, currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.1); 
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterOut);
+
+                    noise.start(currentTime);
+                } else if (r >= 0 && r <= 8) {
+                    // --- SYNTH NADA ---
+                    const osc = offlineCtx.createOscillator();
+                    const filter = offlineCtx.createBiquadFilter();
+                    const gain = offlineCtx.createGain();
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterOut);
+                    gain.connect(delayBus);
+
+                    osc.type = waveform;
+                    osc.frequency.value = scaleNotes[r];
+
+                    // Lowpass filter sweep
+                    filter.type = "lowpass";
+                    filter.frequency.setValueAtTime(300, currentTime); 
+                    filter.frequency.exponentialRampToValueAtTime(3000, currentTime + 0.05);
+
+                    // ADSR Envelope
+                    gain.gain.setValueAtTime(0, currentTime);
+                    gain.gain.linearRampToValueAtTime(0.7, currentTime + attack);
+                    gain.gain.exponentialRampToValueAtTime(0.001, currentTime + attack + release);
+
+                    osc.start(currentTime);
+                    osc.stop(currentTime + attack + release + 0.1);
+                }
+            }
+        }
+
+        // --- SCHEDULING & SWING ---
+        if (c % 2 === 0) { // Langkah genap, delay ke ganjil dikurangi
+            currentTime += baseSpeedSec * (1 - swingAmt);
+        } else { // Langkah ganjil, delay ke genap ditambah
+            currentTime += baseSpeedSec * (1 + swingAmt);
+        }
+    }
+
+    logConsole(`Writing buffer memory...`, true);
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    logConsole(`Encoding to .WAV format...`);
+    const wavData = audioBufferToWav(renderedBuffer);
+    const blob = new Blob([wavData], { type: "audio/wav" });
+
+    if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+    currentAudioUrl = URL.createObjectURL(blob);
+
+    logConsole(`SUCCESS! Audio is ready.`);
+    setTimeout(() => openSaveModal(currentDefaultFileName), 500);
+}
+
+// --- CONVERTER BUFFER KE WAV ---
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const length = buffer.length * numOfChan * 2 + 44;
+    const bufferArray = new ArrayBuffer(length);
+    const view = new DataView(bufferArray);
+    const channels = [];
+    let sample, offset = 0, pos = 0;
+
+    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+    setUint32(0x46464952); // "RIFF"
+    setUint32(length - 8);
+    setUint32(0x45564157); // "WAVE"
+    setUint32(0x20746d66); // "fmt "
+    setUint32(16);
+    setUint16(1);
+    setUint16(numOfChan);
+    setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+    setUint32(0x61746164); // "data"
+    setUint32(length - pos - 4);
+
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+        channels.push(buffer.getChannelData(i));
+    }
+
+    while (pos < length) {
+        for (let i = 0; i < numOfChan; i++) {
+            sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+        }
+        offset++;
+    }
+
+    return bufferArray;
+}
+
+// --- UI BUTTON TRIGGERS ---
+function executeDownload() {
+    let fileName = document.getElementById("fileNameInput").value.trim();
+    fileName = ensureWavExtension(fileName);
+
+    logConsole(`Saving to disk as ${fileName}...`);
+    
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = currentAudioUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    closeSaveModal();
+}
+
+function cookTheCode() {
+    const raw = manualJsonInput.value.trim();
+    if (!raw) {
+        logConsole(`[ERROR] Text input is empty.`);
+        return;
+    }
+    hasProcessedClipboard = true;
+    closeInputModal();
+    processData(raw);
+}
+
+manualJsonInput.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") cookTheCode();
+});
+</script>
+</body>
+</html>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Audio Renderer.exe</title>
 
 <style>
