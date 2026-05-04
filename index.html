@@ -157,6 +157,7 @@
           <select id="fext" aria-label="Pilih ekstensi">
             <option value="docx">.docx</option>
             <option value="png">.png</option>
+            <option value="jpeg">.jpeg</option>
             <option value="wav">.wav</option>
             <option value="json">.json</option>
             <option value="html">.html</option>
@@ -250,10 +251,8 @@
     try {
       const fullName = filename + (ext ? '.' + ext : '');
 
-      // --- GENERATE FILE WORD ASLI (DOCX) ---
       if (ext === 'docx') {
         if (typeof docx === 'undefined') {
-          // Fallback jika tidak ada koneksi internet / library gagal diload
           alert('Gagal memuat pembuat file Word asli. Pastikan terhubung ke internet.');
           triggerDownload(new Blob([text], { type: 'text/plain' }), fullName);
           return;
@@ -284,10 +283,8 @@
         return; 
       }
 
-      // --- GENERATE FILE LAINNYA ---
       let blob;
       if (text.startsWith('data:')) {
-        // Base64 Handler (PNG, WAV, dll)
         const parts = text.split(',');
         const byteString = atob(parts[1]);
         const mimeString = parts[0].split(':')[1].split(';')[0];
@@ -298,7 +295,6 @@
         }
         blob = new Blob([ab], { type: mimeString });
       } else {
-        // Text/Code Handler
         const mime = ext === 'json' ? 'application/json' : 'text/plain';
         blob = new Blob([text], { type: mime });
       }
@@ -320,6 +316,7 @@
       css:  { label: 'CSS',  title: `Membuat file ${filename || 'file'}.css`, class:'theme-css' },
       txt:  { label: 'TXT',  title: `Membuat file ${filename || 'file'}.txt`, class:'theme-txt' },
       png:  { label: 'PNG',  title: `Membuat file ${filename || 'image'}.png`, class:'theme-png' },
+      jpeg: { label: 'JPEG', title: `Membuat file ${filename || 'image'}.jpeg`, class:'theme-png' },
       wav:  { label: 'WAV',  title: `Membuat file ${filename || 'audio'}.wav`, class:'theme-wav' },
       docx: { label: 'DOCX', title: `Membuat file ${filename || 'file'}.docx`, class:'theme-docx' }
     };
@@ -332,9 +329,11 @@
   }
 
   function guessExtensionFromText(text){
-    if (!text || !text.trim()) return 'docx'; // docx jadi default
+    if (!text || !text.trim()) return 'docx';
     const t = text.trim();
     if (t.startsWith('data:image/png')) return 'png';
+    if (t.startsWith('data:image/jpeg')) return 'jpeg';
+    if (t.startsWith('data:image/jpg')) return 'jpeg';
     if (t.startsWith('data:audio/wav') || t.startsWith('data:audio/x-wav')) return 'wav';
     try { JSON.parse(t); return 'json'; } catch(e){}
     if (/^\s*<!doctype html|<html[\s>]/i.test(t) || /<head|<body/i.test(t)) return 'html';
@@ -400,7 +399,7 @@
       const guessed = guessExtensionFromText(text);
       updateProgress(45, 'Konten ditemukan. Menunggu konfirmasi…');
       
-      const defaultName = guessed === 'png' ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
+      const defaultName = (guessed === 'png' || guessed === 'jpeg') ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
       const save = await showSaveDialog(defaultName, guessed);
       if (!save) {
         stopFakeProgress();
@@ -444,7 +443,7 @@
         const val = hidden.value || '';
         if (!val.trim()) return;
         const guessed = guessExtensionFromText(val);
-        const defaultName = guessed === 'png' ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
+        const defaultName = (guessed === 'png' || guessed === 'jpeg') ? 'image' : (guessed === 'wav' ? 'audio' : 'file');
         const save = await showSaveDialog(defaultName, guessed);
         if (!save) return;
         setThemeForExt(save.ext, save.name);
@@ -454,7 +453,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    setThemeForExt('docx', 'file'); // docx jadi tampilan default waktu web diload
+    setThemeForExt('docx', 'file');
     const ok = await attemptClipboardFlow();
     if (!ok) enableFallback();
   });
