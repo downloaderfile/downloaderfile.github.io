@@ -63,7 +63,7 @@ body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
     padding: 10px;
-    height: 140px;
+    height: 120px;
     overflow-y: auto;
     line-height: 1.5;
     box-sizing: border-box;
@@ -181,14 +181,14 @@ button.win-btn:active {
 <div class="window">
     <div class="title-bar">
         <span>DSP Audio Renderer.exe</span>
-        <span style="font-size: 11px;">v2.5 Pro</span>
+        <span style="font-size: 11px;">v2.0</span>
     </div>
     <div class="content">
         <div class="info-text">
             <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px;">
             <div>
                 <strong>Music Maker Rendering Engine</strong><br>
-                <span style="font-size: 11px; color: #444;">Supports: ADSR, Delay, Swing, Phonk Sampler Engine</span>
+                <span style="font-size: 11px; color: #444;">Supports: Synth, Sampler, ADSR, Delay FX, Swing</span>
             </div>
         </div>
         
@@ -245,7 +245,7 @@ button.win-btn:active {
 <textarea id="hiddenPasteArea"></textarea>
 
 <script>
-// --- KONFIGURASI SCALES & SAMPLERS (Sinkron dengan Music Maker) ---
+// --- KONFIGURASI SCALES & SAMPLES ---
 const SCALES = {
     minor: [523.25, 466.16, 392.00, 349.23, 311.13, 261.63, 233.08, 196.00, 130.81],
     major: [523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66, 261.63, 130.81],
@@ -253,7 +253,6 @@ const SCALES = {
     blues: [622.25, 523.25, 466.16, 392.00, 369.99, 349.23, 311.13, 261.63, 130.81],
     hirajoshi: [523.25, 415.30, 392.00, 311.13, 261.63, 207.65, 196.00, 155.56, 130.81]
 };
-
 const sampleNames = ["VNDALXST", "GRYMVZN", "KLLRHYTHM", "PHNTMX", "BRKNBLST", "STRXGH", "DSXSTX", "NIGHTMXRE", "FRGMNTS"];
 
 const consoleBox = document.getElementById("consoleBox");
@@ -267,7 +266,6 @@ let autoReadAttempted = false;
 let currentDefaultFileName = "My_Sequence.wav";
 let currentRecipeName = "My_Sequence.wav";
 
-// --- UTILITY LOGGING ---
 function logConsole(text, overwriteLast = false) {
     consoleBox.innerHTML = consoleBox.innerHTML.replace('<span class="blink">_</span>', '');
     if (overwriteLast) {
@@ -280,11 +278,8 @@ function logConsole(text, overwriteLast = false) {
     consoleBox.scrollTop = consoleBox.scrollHeight;
 }
 
-// --- LISTENER PASTE GLOBAL ---
 window.addEventListener("paste", (e) => {
-    if (inputModal.classList.contains("show") && e.target === manualJsonInput) {
-        return;
-    }
+    if (inputModal.classList.contains("show") && e.target === manualJsonInput) return;
     e.preventDefault();
     const pasteData = (e.clipboardData || window.clipboardData).getData("text");
     processClipboardText(pasteData);
@@ -300,42 +295,35 @@ window.addEventListener("focus", () => {
     }
 });
 
-function showModal(modalEl) {
-    modalEl.classList.add("show");
-    modalEl.style.display = "flex";
+function showModal(modalEl) { modalEl.classList.add("show"); modalEl.style.display = "flex"; }
+function hideModal(modalEl) { modalEl.classList.remove("show"); modalEl.style.display = "none"; }
+function ensureWavExtension(name) { return (name || "My_Sequence").trim().replace(/\.wav$/i, '') + ".wav"; }
+function openInputModal(prefillText = "") {
+    manualJsonInput.value = prefillText || manualJsonInput.value || "";
+    showModal(inputModal);
+    setTimeout(() => manualJsonInput.focus(), 0);
 }
-
-function hideModal(modalEl) {
-    modalEl.classList.remove("show");
-    modalEl.style.display = "none";
+function closeInputModal() { hideModal(inputModal); }
+function openSaveModal(defaultName = currentDefaultFileName) {
+    const input = document.getElementById("fileNameInput");
+    input.value = ensureWavExtension(defaultName);
+    showModal(saveModal);
+    setTimeout(() => input.focus(), 0);
 }
-
-function ensureWavExtension(name) {
-    let fileName = (name || "").trim() || "My_Sequence.wav";
-    if (!/\.wav$/i.test(fileName)) fileName += ".wav";
-    return fileName;
-}
+function closeSaveModal() { hideModal(saveModal); logConsole("Awaiting new sequence data (Ctrl+V)..."); hasProcessedClipboard = false; autoReadAttempted = false; }
 
 async function tryAutoReadClipboard() {
     if (hasProcessedClipboard || autoReadAttempted) return;
     autoReadAttempted = true;
-
     if (!navigator.clipboard || !navigator.clipboard.readText) {
         logConsole("Clipboard API error. Fallback to manual input.");
-        openInputModal();
-        return;
+        openInputModal(); return;
     }
-
     try {
         logConsole("Requesting clipboard access...");
         const text = await navigator.clipboard.readText();
-
-        if (typeof text === "string" && text.trim()) {
-            processClipboardText(text.trim());
-        } else {
-            logConsole("Clipboard is empty.");
-            openInputModal();
-        }
+        if (typeof text === "string" && text.trim()) processClipboardText(text.trim());
+        else { logConsole("Clipboard is empty."); openInputModal(); }
     } catch (err) {
         logConsole("Clipboard access denied. Please paste manually.");
         openInputModal();
@@ -349,44 +337,17 @@ function processClipboardText(pasteData) {
     processData(pasteData);
 }
 
-function openInputModal(prefillText = "") {
-    manualJsonInput.value = prefillText || manualJsonInput.value || "";
-    showModal(inputModal);
-    setTimeout(() => manualJsonInput.focus(), 0);
-}
-
-function closeInputModal() {
-    hideModal(inputModal);
-}
-
-function openSaveModal(defaultName = currentDefaultFileName) {
-    const input = document.getElementById("fileNameInput");
-    input.value = ensureWavExtension(defaultName);
-    showModal(saveModal);
-    setTimeout(() => input.focus(), 0);
-}
-
-function closeSaveModal() {
-    hideModal(saveModal);
-    logConsole("Awaiting new sequence data (Ctrl+V)...");
-    hasProcessedClipboard = false;
-    autoReadAttempted = false;
-}
-
-// --- PROSES JSON KE AUDIO ---
 async function processData(data) {
     try {
         logConsole("Parsing JSON data...");
         const recipe = JSON.parse(data);
-
-        if (!recipe || typeof recipe !== "object" || typeof recipe.bpm !== "number" || !Array.isArray(recipe.grid)) {
-            throw new Error("Invalid JSON Signature.");
-        }
+        if (!recipe || typeof recipe !== "object" || typeof recipe.bpm !== "number" || !Array.isArray(recipe.grid)) throw new Error("Invalid JSON Signature.");
 
         currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim() ? recipe.Name.trim() : "My_Sequence";
         currentDefaultFileName = ensureWavExtension(currentRecipeName);
-
-        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Engine: ${recipe.scaleSelect || 'minor'}`);
+        
+        const mode = sampleNames.includes(recipe.scaleSelect) ? 'Sampler' : 'Synth';
+        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Mode: ${mode}`);
         logConsole("Allocating DSP Memory...");
 
         setTimeout(() => {
@@ -395,7 +356,6 @@ async function processData(data) {
                 hasProcessedClipboard = false;
             });
         }, 500);
-
     } catch (err) {
         logConsole(`[FATAL] JSON parse error! Not a valid recipe.`);
         console.error(err);
@@ -404,37 +364,54 @@ async function processData(data) {
     }
 }
 
-// --- ENGINE RENDER AUDIO (OFFLINE CONTEXT) ---
+// Fungsi Fetch Assets Relatif
+async function fetchAudioBuffer(url, audioCtx) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        return await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.warn("Gagal memuat:", url);
+        return null; 
+    }
+}
+
 async function renderOfflineAudio(recipe) {
     const bpm = recipe.bpm || 120;
     const baseSpeedSec = (60 / bpm) / 4;
     const cols = recipe.cols;
     const grid = recipe.grid;
     
-    // Deteksi Mode: Synth Tradisional vs Phonk Sampler
     const scaleSelect = recipe.scaleSelect || "minor";
-    let isSamplerMode = sampleNames.includes(scaleSelect);
-    let scaleNotes = SCALES[scaleSelect] || SCALES["minor"];
-
+    const isSamplerMode = sampleNames.includes(scaleSelect);
+    const scaleNotes = SCALES[scaleSelect] || SCALES["minor"];
+    
     const attack = recipe.attack !== undefined ? recipe.attack : 0.05;
     const release = recipe.release !== undefined ? recipe.release : 0.3;
-    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.3;
-    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.1;
+    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.0;
+    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.0;
     const waveform = recipe.waveform || "sawtooth";
 
-    // Kalkulasi Total Durasi
-    const tailDuration = 4.0; 
+    const tailDuration = 3.5; 
     const totalDuration = (cols * baseSpeedSec) + tailDuration;
+
+    const OfflineAudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineAudioCtx) throw new Error("OfflineAudioContext not supported.");
+    const offlineCtx = new OfflineAudioCtx(1, Math.ceil(44100 * totalDuration), 44100);
+
+    // Fetching relative assets sesuai repo GitHub
+    logConsole("Loading required audio files from server...");
+    const kickBuffer = await fetchAudioBuffer('./kick.mp3', offlineCtx);
+    const snareBuffer = await fetchAudioBuffer('./snare.mp3', offlineCtx);
+    let phonkBuffer = null;
+    if (isSamplerMode) {
+        phonkBuffer = await fetchAudioBuffer(`./${scaleSelect}.mp3`, offlineCtx);
+    }
 
     logConsole(`Target Length: ${totalDuration.toFixed(2)}s`);
     logConsole(`Executing Render Loop...`);
 
-    const OfflineAudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    if (!OfflineAudioCtx) throw new Error("OfflineAudioContext not supported.");
-
-    const offlineCtx = new OfflineAudioCtx(1, Math.ceil(44100 * totalDuration), 44100);
-
-    // --- SETUP ROUTING ---
     const masterOut = offlineCtx.createGain();
     masterOut.connect(offlineCtx.destination);
     masterOut.gain.value = 0.8;
@@ -442,72 +419,84 @@ async function renderOfflineAudio(recipe) {
     const delayBus = offlineCtx.createGain();
     const delayNode = offlineCtx.createDelay(1.0);
     const feedbackNode = offlineCtx.createGain();
-
     delayNode.delayTime.value = 0.33;
     feedbackNode.gain.value = 0.4;
     delayBus.gain.value = delayAmt;
-
     delayBus.connect(delayNode);
     delayNode.connect(feedbackNode);
     feedbackNode.connect(delayNode);
     delayNode.connect(offlineCtx.destination);
 
-    // Render White Noise Buffer untuk snare & fallback sampler
-    const noiseBufferSize = offlineCtx.sampleRate * 0.2; 
-    const noiseBuffer = offlineCtx.createBuffer(1, noiseBufferSize, offlineCtx.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noiseBufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+    // Fallback Synth Snare Buffer
+    const synthSnareBuffer = offlineCtx.createBuffer(1, offlineCtx.sampleRate * 0.1, offlineCtx.sampleRate);
+    for (let i = 0; i < synthSnareBuffer.getChannelData(0).length; i++) {
+        synthSnareBuffer.getChannelData(0)[i] = Math.random() * 2 - 1;
+    }
 
     let currentTime = 0;
 
-    // --- RENDER LOOP ---
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < grid.length; r++) { 
             if (grid[r] && grid[r][c]) {
                 if (r === 9) {
                     // --- KICK DRUM ---
-                    const osc = offlineCtx.createOscillator();
-                    const gain = offlineCtx.createGain();
-                    osc.connect(gain);
-                    gain.connect(masterOut);
-
-                    osc.frequency.setValueAtTime(150, currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
-
-                    gain.gain.setValueAtTime(1, currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
-
-                    osc.start(currentTime);
-                    osc.stop(currentTime + 0.5);
+                    if (kickBuffer) {
+                        const source = offlineCtx.createBufferSource();
+                        source.buffer = kickBuffer;
+                        source.connect(masterOut);
+                        source.start(currentTime);
+                    } else {
+                        const osc = offlineCtx.createOscillator();
+                        const gain = offlineCtx.createGain();
+                        osc.connect(gain); gain.connect(masterOut);
+                        osc.frequency.setValueAtTime(150, currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+                        gain.gain.setValueAtTime(1, currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.5);
+                        osc.start(currentTime); osc.stop(currentTime + 0.5);
+                    }
                 } else if (r === 10) {
                     // --- SNARE DRUM ---
-                    const noise = offlineCtx.createBufferSource();
-                    noise.buffer = noiseBuffer;
-
-                    const filter = offlineCtx.createBiquadFilter();
-                    filter.type = "bandpass";
-                    filter.frequency.value = 4000;
-
-                    const gain = offlineCtx.createGain();
-                    gain.gain.setValueAtTime(0.8, currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.1); 
-
-                    noise.connect(filter);
-                    filter.connect(gain);
-                    gain.connect(masterOut);
-
-                    noise.start(currentTime);
+                    if (snareBuffer) {
+                        const source = offlineCtx.createBufferSource();
+                        source.buffer = snareBuffer;
+                        source.connect(masterOut);
+                        source.start(currentTime);
+                    } else {
+                        const noise = offlineCtx.createBufferSource();
+                        noise.buffer = synthSnareBuffer;
+                        const filter = offlineCtx.createBiquadFilter();
+                        filter.type = "bandpass"; filter.frequency.value = 4000;
+                        const gain = offlineCtx.createGain();
+                        gain.gain.setValueAtTime(0.8, currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.1); 
+                        noise.connect(filter); filter.connect(gain); gain.connect(masterOut);
+                        noise.start(currentTime);
+                    }
                 } else if (r >= 0 && r <= 8) {
-                    if (!isSamplerMode) {
-                        // --- MODE 1: SYNTHESIZER TRADISIONAL ---
+                    // --- MELODY / PHONK ---
+                    if (isSamplerMode && phonkBuffer) {
+                        const source = offlineCtx.createBufferSource();
+                        source.buffer = phonkBuffer;
+                        
+                        // Menyesuaikan logika playbackRate dari music_maker.html
+                        const angkaInput = 9 - r;
+                        const n = angkaInput - 5;
+                        source.playbackRate.value = Math.pow(2, n / 12);
+                        
+                        const gain = offlineCtx.createGain();
+                        gain.gain.setValueAtTime(0, currentTime);
+                        gain.gain.linearRampToValueAtTime(1.0, currentTime + (attack > 0 ? attack : 0.01));
+                        
+                        source.connect(gain); gain.connect(masterOut); gain.connect(delayBus);
+                        source.start(currentTime);
+                    } else if (!isSamplerMode) {
                         const osc = offlineCtx.createOscillator();
                         const filter = offlineCtx.createBiquadFilter();
                         const gain = offlineCtx.createGain();
 
-                        osc.connect(filter);
-                        filter.connect(gain);
-                        gain.connect(masterOut);
-                        gain.connect(delayBus);
+                        osc.connect(filter); filter.connect(gain);
+                        gain.connect(masterOut); gain.connect(delayBus);
 
                         osc.type = waveform;
                         osc.frequency.value = scaleNotes[r];
@@ -516,57 +505,17 @@ async function renderOfflineAudio(recipe) {
                         filter.frequency.setValueAtTime(300, currentTime); 
                         filter.frequency.exponentialRampToValueAtTime(3000, currentTime + 0.05);
 
-                        // ADSR
                         gain.gain.setValueAtTime(0, currentTime);
                         gain.gain.linearRampToValueAtTime(0.7, currentTime + attack);
                         gain.gain.exponentialRampToValueAtTime(0.001, currentTime + attack + release);
 
-                        osc.start(currentTime);
-                        osc.stop(currentTime + attack + release + 0.1);
-                    } else {
-                        // --- MODE 2: PHONK SAMPLER ENGINE (DYNAMIC FALLBACK RENDER) ---
-                        const osc = offlineCtx.createOscillator();
-                        const noise = offlineCtx.createBufferSource();
-                        const gain = offlineCtx.createGain();
-                        const filter = offlineCtx.createBiquadFilter();
-
-                        noise.buffer = noiseBuffer;
-                        osc.type = "sawtooth";
-
-                        // Formula Pitching: n = (9 - r) - 5
-                        const pitchShiftSemitones = (9 - r) - 5;
-                        const playbackRate = Math.pow(2, pitchShiftSemitones / 12);
-                        const baseFreq = 220 * playbackRate;
-
-                        osc.frequency.setValueAtTime(baseFreq, currentTime);
-                        filter.type = "bandpass";
-                        filter.frequency.setValueAtTime(1200, currentTime);
-
-                        gain.gain.setValueAtTime(0, currentTime);
-                        gain.gain.linearRampToValueAtTime(0.6, currentTime + (attack > 0 ? attack : 0.01));
-                        gain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.25);
-
-                        osc.connect(filter);
-                        noise.connect(filter);
-                        filter.connect(gain);
-                        gain.connect(masterOut);
-                        gain.connect(delayBus);
-
-                        osc.start(currentTime);
-                        noise.start(currentTime);
-                        osc.stop(currentTime + 0.3);
-                        noise.stop(currentTime + 0.3);
+                        osc.start(currentTime); osc.stop(currentTime + attack + release + 0.1);
                     }
                 }
             }
         }
-
-        // --- SCHEDULING & SWING SYSTEM ---
-        if (c % 2 === 0) {
-            currentTime += baseSpeedSec * (1 - swingAmt);
-        } else {
-            currentTime += baseSpeedSec * (1 + swingAmt);
-        }
+        if (c % 2 === 0) currentTime += baseSpeedSec * (1 - swingAmt);
+        else currentTime += baseSpeedSec * (1 + swingAmt);
     }
 
     logConsole(`Writing buffer memory...`, true);
@@ -583,7 +532,6 @@ async function renderOfflineAudio(recipe) {
     setTimeout(() => openSaveModal(currentDefaultFileName), 500);
 }
 
-// --- CONVERTER BUFFER KE WAV ---
 function audioBufferToWav(buffer) {
     const numOfChan = buffer.numberOfChannels;
     const length = buffer.length * numOfChan * 2 + 44;
@@ -595,61 +543,35 @@ function audioBufferToWav(buffer) {
     function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
     function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
 
-    setUint32(0x46464952); // "RIFF"
-    setUint32(length - 8);
-    setUint32(0x45564157); // "WAVE"
-    setUint32(0x20746d66); // "fmt "
-    setUint32(16);
-    setUint16(1);
-    setUint16(numOfChan);
-    setUint32(buffer.sampleRate);
-    setUint32(buffer.sampleRate * 2 * numOfChan);
-    setUint16(numOfChan * 2);
-    setUint16(16);
-    setUint32(0x61746164); // "data"
-    setUint32(length - pos - 4);
-
-    for (let i = 0; i < buffer.numberOfChannels; i++) {
-        channels.push(buffer.getChannelData(i));
-    }
-
+    setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66);
+    setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16);
+    setUint32(0x61746164); setUint32(length - pos - 4);
+    for (let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
     while (pos < length) {
         for (let i = 0; i < numOfChan; i++) {
             sample = Math.max(-1, Math.min(1, channels[i][offset]));
             sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
-            view.setInt16(pos, sample, true);
-            pos += 2;
+            view.setInt16(pos, sample, true); pos += 2;
         }
         offset++;
     }
-
     return bufferArray;
 }
 
-// --- UI BUTTON TRIGGERS ---
 function executeDownload() {
     let fileName = document.getElementById("fileNameInput").value.trim();
     fileName = ensureWavExtension(fileName);
-
     logConsole(`Saving to disk as ${fileName}...`);
-    
     const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = currentAudioUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
+    a.style.display = "none"; a.href = currentAudioUrl; a.download = fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     closeSaveModal();
 }
 
 function cookTheCode() {
     const raw = manualJsonInput.value.trim();
-    if (!raw) {
-        logConsole(`[ERROR] Text input is empty.`);
-        return;
-    }
+    if (!raw) { logConsole(`[ERROR] Text input is empty.`); return; }
     hasProcessedClipboard = true;
     closeInputModal();
     processData(raw);
