@@ -63,7 +63,7 @@ body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
     padding: 10px;
-    height: 120px;
+    height: 140px;
     overflow-y: auto;
     line-height: 1.5;
     box-sizing: border-box;
@@ -181,14 +181,14 @@ button.win-btn:active {
 <div class="window">
     <div class="title-bar">
         <span>DSP Audio Renderer.exe</span>
-        <span style="font-size: 11px;">v2.0</span>
+        <span style="font-size: 11px;">v2.5 Pro</span>
     </div>
     <div class="content">
         <div class="info-text">
             <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px;">
             <div>
                 <strong>Music Maker Rendering Engine</strong><br>
-                <span style="font-size: 11px; color: #444;">Supports: ADSR, Delay FX, Swing, Multi-Scale</span>
+                <span style="font-size: 11px; color: #444;">Supports: ADSR, Delay, Swing, Phonk Sampler Engine</span>
             </div>
         </div>
         
@@ -245,7 +245,7 @@ button.win-btn:active {
 <textarea id="hiddenPasteArea"></textarea>
 
 <script>
-// --- KONFIGURASI SCALES (Sinkron dengan Music Maker) ---
+// --- KONFIGURASI SCALES & SAMPLERS (Sinkron dengan Music Maker) ---
 const SCALES = {
     minor: [523.25, 466.16, 392.00, 349.23, 311.13, 261.63, 233.08, 196.00, 130.81],
     major: [523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66, 261.63, 130.81],
@@ -253,6 +253,8 @@ const SCALES = {
     blues: [622.25, 523.25, 466.16, 392.00, 369.99, 349.23, 311.13, 261.63, 130.81],
     hirajoshi: [523.25, 415.30, 392.00, 311.13, 261.63, 207.65, 196.00, 155.56, 130.81]
 };
+
+const sampleNames = ["VNDALXST", "GRYMVZN", "KLLRHYTHM", "PHNTMX", "BRKNBLST", "STRXGH", "DSXSTX", "NIGHTMXRE", "FRGMNTS"];
 
 const consoleBox = document.getElementById("consoleBox");
 const saveModal = document.getElementById("saveModal");
@@ -267,16 +269,13 @@ let currentRecipeName = "My_Sequence.wav";
 
 // --- UTILITY LOGGING ---
 function logConsole(text, overwriteLast = false) {
-    // Hilangkan kursor blink sebelumnya
     consoleBox.innerHTML = consoleBox.innerHTML.replace('<span class="blink">_</span>', '');
-    
     if (overwriteLast) {
         const pTags = consoleBox.getElementsByTagName('p');
         if (pTags.length > 0) {
             consoleBox.removeChild(pTags[pTags.length - 1]);
         }
     }
-    
     consoleBox.innerHTML += `<p>> ${text} <span class="blink">_</span></p>`;
     consoleBox.scrollTop = consoleBox.scrollHeight;
 }
@@ -387,7 +386,7 @@ async function processData(data) {
         currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim() ? recipe.Name.trim() : "My_Sequence";
         currentDefaultFileName = ensureWavExtension(currentRecipeName);
 
-        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Scale: ${recipe.scaleSelect || 'minor'}`);
+        logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Engine: ${recipe.scaleSelect || 'minor'}`);
         logConsole("Allocating DSP Memory...");
 
         setTimeout(() => {
@@ -412,16 +411,19 @@ async function renderOfflineAudio(recipe) {
     const cols = recipe.cols;
     const grid = recipe.grid;
     
-    // Fallback support parameter baru
-    const scaleNotes = SCALES[recipe.scaleSelect] || SCALES["minor"];
+    // Deteksi Mode: Synth Tradisional vs Phonk Sampler
+    const scaleSelect = recipe.scaleSelect || "minor";
+    let isSamplerMode = sampleNames.includes(scaleSelect);
+    let scaleNotes = SCALES[scaleSelect] || SCALES["minor"];
+
     const attack = recipe.attack !== undefined ? recipe.attack : 0.05;
     const release = recipe.release !== undefined ? recipe.release : 0.3;
-    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.0;
-    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.0;
+    const delayAmt = recipe.delayAmt !== undefined ? recipe.delayAmt : 0.3;
+    const swingAmt = recipe.swingAmt !== undefined ? recipe.swingAmt : 0.1;
     const waveform = recipe.waveform || "sawtooth";
 
-    // Kalkulasi Total Durasi: Waktu langkah + Panjang Note + Ekor FX (Delay)
-    const tailDuration = 3.5; // Ekor gema 3.5 detik
+    // Kalkulasi Total Durasi
+    const tailDuration = 4.0; 
     const totalDuration = (cols * baseSpeedSec) + tailDuration;
 
     logConsole(`Target Length: ${totalDuration.toFixed(2)}s`);
@@ -450,17 +452,17 @@ async function renderOfflineAudio(recipe) {
     feedbackNode.connect(delayNode);
     delayNode.connect(offlineCtx.destination);
 
-    // Render White Noise Buffer sekali untuk snare
-    const snareBufferSize = offlineCtx.sampleRate * 0.1; 
-    const snareBuffer = offlineCtx.createBuffer(1, snareBufferSize, offlineCtx.sampleRate);
-    const snareData = snareBuffer.getChannelData(0);
-    for (let i = 0; i < snareBufferSize; i++) snareData[i] = Math.random() * 2 - 1;
+    // Render White Noise Buffer untuk snare & fallback sampler
+    const noiseBufferSize = offlineCtx.sampleRate * 0.2; 
+    const noiseBuffer = offlineCtx.createBuffer(1, noiseBufferSize, offlineCtx.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
 
     let currentTime = 0;
 
     // --- RENDER LOOP ---
     for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < grid.length; r++) { // Bisa 9 baris (old) atau 11 baris (new)
+        for (let r = 0; r < grid.length; r++) { 
             if (grid[r] && grid[r][c]) {
                 if (r === 9) {
                     // --- KICK DRUM ---
@@ -480,7 +482,7 @@ async function renderOfflineAudio(recipe) {
                 } else if (r === 10) {
                     // --- SNARE DRUM ---
                     const noise = offlineCtx.createBufferSource();
-                    noise.buffer = snareBuffer;
+                    noise.buffer = noiseBuffer;
 
                     const filter = offlineCtx.createBiquadFilter();
                     filter.type = "bandpass";
@@ -496,39 +498,73 @@ async function renderOfflineAudio(recipe) {
 
                     noise.start(currentTime);
                 } else if (r >= 0 && r <= 8) {
-                    // --- SYNTH NADA ---
-                    const osc = offlineCtx.createOscillator();
-                    const filter = offlineCtx.createBiquadFilter();
-                    const gain = offlineCtx.createGain();
+                    if (!isSamplerMode) {
+                        // --- MODE 1: SYNTHESIZER TRADISIONAL ---
+                        const osc = offlineCtx.createOscillator();
+                        const filter = offlineCtx.createBiquadFilter();
+                        const gain = offlineCtx.createGain();
 
-                    osc.connect(filter);
-                    filter.connect(gain);
-                    gain.connect(masterOut);
-                    gain.connect(delayBus);
+                        osc.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(masterOut);
+                        gain.connect(delayBus);
 
-                    osc.type = waveform;
-                    osc.frequency.value = scaleNotes[r];
+                        osc.type = waveform;
+                        osc.frequency.value = scaleNotes[r];
 
-                    // Lowpass filter sweep
-                    filter.type = "lowpass";
-                    filter.frequency.setValueAtTime(300, currentTime); 
-                    filter.frequency.exponentialRampToValueAtTime(3000, currentTime + 0.05);
+                        filter.type = "lowpass";
+                        filter.frequency.setValueAtTime(300, currentTime); 
+                        filter.frequency.exponentialRampToValueAtTime(3000, currentTime + 0.05);
 
-                    // ADSR Envelope
-                    gain.gain.setValueAtTime(0, currentTime);
-                    gain.gain.linearRampToValueAtTime(0.7, currentTime + attack);
-                    gain.gain.exponentialRampToValueAtTime(0.001, currentTime + attack + release);
+                        // ADSR
+                        gain.gain.setValueAtTime(0, currentTime);
+                        gain.gain.linearRampToValueAtTime(0.7, currentTime + attack);
+                        gain.gain.exponentialRampToValueAtTime(0.001, currentTime + attack + release);
 
-                    osc.start(currentTime);
-                    osc.stop(currentTime + attack + release + 0.1);
+                        osc.start(currentTime);
+                        osc.stop(currentTime + attack + release + 0.1);
+                    } else {
+                        // --- MODE 2: PHONK SAMPLER ENGINE (DYNAMIC FALLBACK RENDER) ---
+                        const osc = offlineCtx.createOscillator();
+                        const noise = offlineCtx.createBufferSource();
+                        const gain = offlineCtx.createGain();
+                        const filter = offlineCtx.createBiquadFilter();
+
+                        noise.buffer = noiseBuffer;
+                        osc.type = "sawtooth";
+
+                        // Formula Pitching: n = (9 - r) - 5
+                        const pitchShiftSemitones = (9 - r) - 5;
+                        const playbackRate = Math.pow(2, pitchShiftSemitones / 12);
+                        const baseFreq = 220 * playbackRate;
+
+                        osc.frequency.setValueAtTime(baseFreq, currentTime);
+                        filter.type = "bandpass";
+                        filter.frequency.setValueAtTime(1200, currentTime);
+
+                        gain.gain.setValueAtTime(0, currentTime);
+                        gain.gain.linearRampToValueAtTime(0.6, currentTime + (attack > 0 ? attack : 0.01));
+                        gain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.25);
+
+                        osc.connect(filter);
+                        noise.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(masterOut);
+                        gain.connect(delayBus);
+
+                        osc.start(currentTime);
+                        noise.start(currentTime);
+                        osc.stop(currentTime + 0.3);
+                        noise.stop(currentTime + 0.3);
+                    }
                 }
             }
         }
 
-        // --- SCHEDULING & SWING ---
-        if (c % 2 === 0) { // Langkah genap, delay ke ganjil dikurangi
+        // --- SCHEDULING & SWING SYSTEM ---
+        if (c % 2 === 0) {
             currentTime += baseSpeedSec * (1 - swingAmt);
-        } else { // Langkah ganjil, delay ke genap ditambah
+        } else {
             currentTime += baseSpeedSec * (1 + swingAmt);
         }
     }
