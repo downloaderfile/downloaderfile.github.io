@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Music Maker - Audio Renderer</title>
+<title>Music Maker - Audio Renderer (MP3 Edition)</title>
 
 <style>
 /* Estetika Windows 95 Pro Audio Edition */
@@ -175,20 +175,23 @@ button.win-btn:active {
     gap: 8px;
 }
 </style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+
 </head>
 <body>
 
 <div class="window">
     <div class="title-bar">
         <span>DSP Audio Renderer.exe</span>
-        <span style="font-size: 11px;">v2.0</span>
+        <span style="font-size: 11px;">v2.0 (MP3 Build)</span>
     </div>
     <div class="content">
         <div class="info-text">
             <img src="https://win98icons.alexmeub.com/icons/png/media_player_stream_stereo-0.png" alt="Audio Icon" style="width: 32px; height: 32px;">
             <div>
                 <strong>Music Maker Rendering Engine</strong><br>
-                <span style="font-size: 11px; color: #444;">Supports: Synth, Sampler, ADSR, Delay FX, Swing</span>
+                <span style="font-size: 11px; color: #444;">Supports: Synth, Sampler, ADSR, Delay FX, MP3 Export</span>
             </div>
         </div>
         
@@ -208,11 +211,11 @@ button.win-btn:active {
             <span style="cursor: pointer; background: #c0c0c0; color: black; border: 1px outset #fff; padding: 0 4px;" onclick="closeSaveModal()">X</span>
         </div>
         <div class="modal-content">
-            <div style="font-size: 12px;">Proses rendering selesai. Simpan file WAV:</div>
+            <div style="font-size: 12px;">Proses rendering selesai. Simpan file MP3:</div>
 
             <div class="input-group">
                 <label>File name:</label>
-                <input type="text" id="fileNameInput" value="My_Sequence.wav">
+                <input type="text" id="fileNameInput" value="My_Sequence.mp3">
             </div>
 
             <div class="button-group">
@@ -263,8 +266,8 @@ const manualJsonInput = document.getElementById("manualJsonInput");
 let currentAudioUrl = null;
 let hasProcessedClipboard = false;
 let autoReadAttempted = false;
-let currentDefaultFileName = "My_Sequence.wav";
-let currentRecipeName = "My_Sequence.wav";
+let currentDefaultFileName = "My_Sequence.mp3";
+let currentRecipeName = "My_Sequence.mp3";
 
 function logConsole(text, overwriteLast = false) {
     consoleBox.innerHTML = consoleBox.innerHTML.replace('<span class="blink">_</span>', '');
@@ -297,7 +300,7 @@ window.addEventListener("focus", () => {
 
 function showModal(modalEl) { modalEl.classList.add("show"); modalEl.style.display = "flex"; }
 function hideModal(modalEl) { modalEl.classList.remove("show"); modalEl.style.display = "none"; }
-function ensureWavExtension(name) { return (name || "My_Sequence").trim().replace(/\.wav$/i, '') + ".wav"; }
+function ensureMp3Extension(name) { return (name || "My_Sequence").trim().replace(/\.(wav|mp3)$/i, '') + ".mp3"; }
 function openInputModal(prefillText = "") {
     manualJsonInput.value = prefillText || manualJsonInput.value || "";
     showModal(inputModal);
@@ -306,7 +309,7 @@ function openInputModal(prefillText = "") {
 function closeInputModal() { hideModal(inputModal); }
 function openSaveModal(defaultName = currentDefaultFileName) {
     const input = document.getElementById("fileNameInput");
-    input.value = ensureWavExtension(defaultName);
+    input.value = ensureMp3Extension(defaultName);
     showModal(saveModal);
     setTimeout(() => input.focus(), 0);
 }
@@ -344,7 +347,7 @@ async function processData(data) {
         if (!recipe || typeof recipe !== "object" || typeof recipe.bpm !== "number" || !Array.isArray(recipe.grid)) throw new Error("Invalid JSON Signature.");
 
         currentRecipeName = typeof recipe.Name === "string" && recipe.Name.trim() ? recipe.Name.trim() : "My_Sequence";
-        currentDefaultFileName = ensureWavExtension(currentRecipeName);
+        currentDefaultFileName = ensureMp3Extension(currentRecipeName);
         
         const mode = sampleNames.includes(recipe.scaleSelect) ? 'Sampler' : 'Synth';
         logConsole(`Data loaded: [${currentRecipeName}] | BPM: ${recipe.bpm} | Mode: ${mode}`);
@@ -521,47 +524,60 @@ async function renderOfflineAudio(recipe) {
     logConsole(`Writing buffer memory...`, true);
     const renderedBuffer = await offlineCtx.startRendering();
 
-    logConsole(`Encoding to .WAV format...`);
-    const wavData = audioBufferToWav(renderedBuffer);
-    const blob = new Blob([wavData], { type: "audio/wav" });
+    logConsole(`Encoding to .MP3 format (128kbps)...`);
+    
+    // Konversi AudioBuffer ke MP3 menggunakan lamejs
+    const mp3Data = audioBufferToMp3(renderedBuffer);
+    const blob = new Blob(mp3Data, { type: "audio/mp3" });
 
     if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
     currentAudioUrl = URL.createObjectURL(blob);
 
-    logConsole(`SUCCESS! Audio is ready.`);
+    logConsole(`SUCCESS! MP3 Audio is ready.`);
     setTimeout(() => openSaveModal(currentDefaultFileName), 500);
 }
 
-function audioBufferToWav(buffer) {
-    const numOfChan = buffer.numberOfChannels;
-    const length = buffer.length * numOfChan * 2 + 44;
-    const bufferArray = new ArrayBuffer(length);
-    const view = new DataView(bufferArray);
-    const channels = [];
-    let sample, offset = 0, pos = 0;
-
-    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
-    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
-
-    setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66);
-    setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(buffer.sampleRate);
-    setUint32(buffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16);
-    setUint32(0x61746164); setUint32(length - pos - 4);
-    for (let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-    while (pos < length) {
-        for (let i = 0; i < numOfChan; i++) {
-            sample = Math.max(-1, Math.min(1, channels[i][offset]));
-            sample = (sample < 0 ? sample * 32768 : sample * 32767) | 0;
-            view.setInt16(pos, sample, true); pos += 2;
-        }
-        offset++;
+// Fungsi konversi menggunakan library lamejs
+function audioBufferToMp3(buffer) {
+    const channels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    
+    // Menggunakan Mp3Encoder(channels, sampleRate, bitrate)
+    // Diatur ke mono (1 channel) menyesuaikan konfigurasi OfflineAudioContext di atas
+    const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
+    const mp3Data = [];
+    
+    const samples = buffer.getChannelData(0);
+    const sampleBlockSize = 1152; // Ukuran blok standar untuk encoder MP3
+    
+    // Konversi data Float32 Web Audio API ke 16-bit Int16 PCM untuk lamejs
+    const int16Samples = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+        let s = Math.max(-1, Math.min(1, samples[i]));
+        int16Samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
-    return bufferArray;
+    
+    // Proses per-blok data
+    for (let i = 0; i < int16Samples.length; i += sampleBlockSize) {
+        const sampleChunk = int16Samples.subarray(i, i + sampleBlockSize);
+        const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+        if (mp3buf.length > 0) {
+            mp3Data.push(new Uint8Array(mp3buf));
+        }
+    }
+    
+    // Selesaikan encoding (flush sisa buffer data terakhir)
+    const mp3buf = mp3encoder.flush();
+    if (mp3buf.length > 0) {
+        mp3Data.push(new Uint8Array(mp3buf));
+    }
+    
+    return mp3Data;
 }
 
 function executeDownload() {
     let fileName = document.getElementById("fileNameInput").value.trim();
-    fileName = ensureWavExtension(fileName);
+    fileName = ensureMp3Extension(fileName);
     logConsole(`Saving to disk as ${fileName}...`);
     const a = document.createElement("a");
     a.style.display = "none"; a.href = currentAudioUrl; a.download = fileName;
